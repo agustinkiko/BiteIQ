@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "MacroMind",
+    "slug": "myfitnesspal-ai",
+    "scheme": "macromind",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "MacroMind uses the camera to capture meals, barcodes, and nutrition labels.",
+        "NSMicrophoneUsageDescription": "MacroMind uses the microphone to capture spoken meal descriptions.",
+        "NSPhotoLibraryUsageDescription": "MacroMind lets you choose meal photos from your library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F8FAFC"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_MEDIA_IMAGES"
+      ],
+      "package": "com.local.macromind"
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-image-picker"
+    ]
+  }
+}
