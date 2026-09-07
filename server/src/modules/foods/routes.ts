@@ -51,7 +51,8 @@ export const foodRoutes: FastifyPluginAsync<FoodRoutesOptions> = async (
     const warnings: FoodSearchWarning[] = [];
 
     if (normalizedQuery.length >= 3 && localFoods.length < query.limit) {
-      const provider = options.providers.get("usda");
+      const provider =
+        options.providers.get("usda") ?? options.providers.get("development");
       if (provider) {
         let providerFoods;
         try {

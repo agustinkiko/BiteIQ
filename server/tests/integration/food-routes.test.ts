@@ -9,6 +9,7 @@ import { createDb } from "../../src/db/client.js";
 import { registerErrorHandler } from "../../src/errors.js";
 import { createFoodRepository } from "../../src/modules/foods/repository.js";
 import { foodRoutes } from "../../src/modules/foods/routes.js";
+import { createDevelopmentNutritionProvider } from "../../src/providers/nutrition/development.js";
 import type {
   NutritionProvider,
   NutritionProviderRegistry,
@@ -93,7 +94,7 @@ describe("food route plugin", () => {
     await app.close();
   });
 
-  it("fetches, persists, and returns USDA when local results are insufficient", async () => {
+  it("prefers USDA when local results are insufficient and both providers are available", async () => {
     const provider = providerReturning([
       providerFood({
         externalId: "remote",
@@ -101,7 +102,12 @@ describe("food route plugin", () => {
         brand: "Remote Brand",
       }),
     ]);
-    const app = await buildFoodApp(registry(provider));
+    const app = await buildFoodApp(
+      registry(
+        provider,
+        createDevelopmentNutritionProvider({ nodeEnv: "development" }),
+      ),
+    );
 
     const response = await search(app, "chicken", 2);
     const body = response.json();
@@ -159,6 +165,36 @@ describe("food route plugin", () => {
       `SELECT count(*)::text AS count
        FROM food_external_sources
        WHERE provider = 'usda' AND external_id = 'remote'`,
+    );
+    expect(persisted.rows[0]?.count).toBe("1");
+    await app.close();
+  });
+
+  it("fetches, persists, and returns development food when USDA is unavailable", async () => {
+    const app = await buildFoodApp(
+      registry(createDevelopmentNutritionProvider({ nodeEnv: "development" })),
+    );
+
+    const response = await search(app, "chicken", 2);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      foods: [
+        {
+          name: "Chicken Test Food",
+          source: {
+            provider: "development",
+            externalId: "chicken-test-food",
+            attribution: "BiteIQ deterministic development data",
+          },
+        },
+      ],
+      warnings: [],
+    });
+    const persisted = await pool.query<{ count: string }>(
+      `SELECT count(*)::text AS count
+       FROM food_external_sources
+       WHERE provider = 'development' AND external_id = 'chicken-test-food'`,
     );
     expect(persisted.rows[0]?.count).toBe("1");
     await app.close();
@@ -380,13 +416,13 @@ function requestAsUser(
   });
 }
 
-function registry(provider?: NutritionProvider): NutritionProviderRegistry {
+function registry(...providers: NutritionProvider[]): NutritionProviderRegistry {
   return {
     get(id) {
-      return id === "usda" ? provider : undefined;
+      return providers.find((provider) => provider.id === id);
     },
     list() {
-      return provider ? [provider] : [];
+      return [...providers];
     },
   };
 }
