@@ -198,6 +198,32 @@ describe("diary repository", () => {
     });
   });
 
+  it("normalizes quantity to the database scale before calculating snapshots", async () => {
+    const day = await repository.createEntry(userId, {
+      clientId,
+      foodId,
+      servingId,
+      quantity: "1.23456",
+      mealType: "lunch",
+      consumedAt,
+    });
+
+    expect(day.entries[0]).toMatchObject({
+      quantity: "1.2346",
+      consumedGrams: "123.4600",
+      calorieSnapshot: "203.709000",
+      nutrientSnapshot: {
+        protein: { amount: "38.272600", unit: "g" },
+      },
+    });
+    expect(day.summary).toMatchObject({
+      calorieTotal: "203.709000",
+      nutrientTotals: {
+        protein: { amount: "38.272600", unit: "g" },
+      },
+    });
+  });
+
   it("deletes the entry and persists zero daily totals", async () => {
     const created = await repository.createEntry(userId, {
       clientId,
@@ -262,7 +288,84 @@ describe("diary repository", () => {
     );
     expect(stored.rows[0]).toEqual({ days: "0", entries: "0" });
   });
+
+  it("reads entries and their summary from one repeatable snapshot", async () => {
+    await repository.createEntry(userId, {
+      clientId,
+      foodId,
+      servingId,
+      quantity: "1.5",
+      mealType: "lunch",
+      consumedAt,
+    });
+    const writer = await pool.connect();
+    try {
+      await writer.query("BEGIN");
+      await writer.query(
+        "LOCK TABLE daily_nutrition_summaries IN ACCESS EXCLUSIVE MODE",
+      );
+
+      const reading = repository.getDiary(userId, "2026-09-09");
+      await waitForBlockedSummaryRead(pool);
+      await writer.query(
+        `UPDATE food_entries
+         SET quantity = 3, consumed_grams = 300, calorie_snapshot = 495,
+             nutrient_snapshot = $2::jsonb
+         WHERE user_id = $1`,
+        [
+          userId,
+          JSON.stringify({
+            protein: { amount: "93.000000", unit: "g" },
+            carbohydrate: { amount: "0.000000", unit: "g" },
+            fat: { amount: "10.800000", unit: "g" },
+          }),
+        ],
+      );
+      await writer.query(
+        `UPDATE daily_nutrition_summaries
+         SET calorie_total = 495, nutrient_totals = $2::jsonb
+         WHERE user_id = $1 AND local_date = DATE '2026-09-09'`,
+        [
+          userId,
+          JSON.stringify({
+            protein: { amount: "93.000000", unit: "g" },
+            carbohydrate: { amount: "0.000000", unit: "g" },
+            fat: { amount: "10.800000", unit: "g" },
+          }),
+        ],
+      );
+      await writer.query("COMMIT");
+
+      const day = await reading;
+      expect(day.entries[0]?.calorieSnapshot).toBe("247.500000");
+      expect(day.summary.calorieTotal).toBe("247.500000");
+    } finally {
+      try {
+        await writer.query("ROLLBACK");
+      } finally {
+        writer.release();
+      }
+    }
+  });
 });
+
+async function waitForBlockedSummaryRead(pool: Pool): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const blocked = await pool.query<{ blocked: boolean }>(`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND wait_event_type = 'Lock'
+          AND query ILIKE '%daily_nutrition_summaries%'
+      ) AS blocked
+    `);
+    if (blocked.rows[0]?.blocked) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Timed out waiting for the summary read to block");
+}
 
 async function insertUserProfile(
   pool: Pool,

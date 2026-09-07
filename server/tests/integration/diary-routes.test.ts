@@ -220,6 +220,23 @@ describe("diary route plugin", () => {
     expect(response.json()).toMatchObject({ error: { code: "INVALID_INPUT" } });
   });
 
+  it.each(["0.00001", "1e-4", " 1", "1 ", ".5"])(
+    'returns strict INVALID_INPUT for unsafe quantity "%s"',
+    async (quantity) => {
+      const response = await requestAs(
+        userAId,
+        "POST",
+        "/api/diary/2026-09-09/entries",
+        { ...entryInput(), quantity },
+      );
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: { code: "INVALID_INPUT" },
+      });
+    },
+  );
+
   function entryInput(overrides: Record<string, unknown> = {}) {
     return {
       clientId: randomUUID(),

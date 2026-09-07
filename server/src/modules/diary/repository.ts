@@ -36,7 +36,7 @@ import type {
   MealType,
   UpdateDiaryEntryInput,
 } from "./contracts.js";
-import { localDateSchema } from "./contracts.js";
+import { localDateSchema, normalizeQuantity } from "./contracts.js";
 
 const authenticatedUserIdSchema = z.string().uuid();
 
@@ -52,6 +52,7 @@ export class DiaryRepositoryError extends Error {
       | "PROFILE_REQUIRED"
       | "FOOD_NOT_FOUND"
       | "SERVING_NOT_FOUND"
+      | "INVALID_QUANTITY"
       | "INVALID_NUTRITION",
     message: string,
   ) {
@@ -65,7 +66,10 @@ export function createDiaryRepository(db: BiteIqDatabase) {
     async getDiary(userId: string, localDate: string): Promise<DiaryDayDto> {
       const ownerId = authenticatedUserIdSchema.parse(userId);
       const date = localDateSchema.parse(localDate);
-      return db.transaction((transaction) => loadDiary(transaction, ownerId, date));
+      return db.transaction(
+        (transaction) => loadDiary(transaction, ownerId, date),
+        { isolationLevel: "repeatable read", accessMode: "read only" },
+      );
     },
 
     async createEntry(
@@ -73,6 +77,7 @@ export function createDiaryRepository(db: BiteIqDatabase) {
       input: CreateDiaryEntryInput,
     ): Promise<DiaryDayDto> {
       const ownerId = authenticatedUserIdSchema.parse(userId);
+      const quantity = normalizeInputQuantity(input.quantity);
       return db.transaction(async (transaction) => {
         await advisoryLock(transaction, `diary-client:${ownerId}:${input.clientId}`);
         const existing = await findByClientId(transaction, ownerId, input.clientId);
@@ -88,7 +93,7 @@ export function createDiaryRepository(db: BiteIqDatabase) {
           transaction,
           input.foodId,
           input.servingId,
-          input.quantity,
+          quantity,
         );
         const now = new Date();
         await transaction.insert(foodEntries).values({
@@ -98,7 +103,7 @@ export function createDiaryRepository(db: BiteIqDatabase) {
           mealType: input.mealType,
           foodId: input.foodId,
           ...snapshot,
-          quantity: input.quantity,
+          quantity,
           consumedAt: new Date(input.consumedAt),
           updatedAt: now,
         });
@@ -119,6 +124,7 @@ export function createDiaryRepository(db: BiteIqDatabase) {
     ): Promise<DiaryDayDto | null> {
       const ownerId = authenticatedUserIdSchema.parse(userId);
       const id = z.string().uuid().parse(entryId);
+      const quantity = normalizeInputQuantity(input.quantity);
       return db.transaction(async (transaction) => {
         await advisoryLock(transaction, `diary-entry:${id}`);
         const existing = await findOwnedEntry(transaction, ownerId, id);
@@ -140,7 +146,7 @@ export function createDiaryRepository(db: BiteIqDatabase) {
           transaction,
           input.foodId,
           input.servingId,
-          input.quantity,
+          quantity,
         );
         await transaction
           .update(foodEntries)
@@ -149,7 +155,7 @@ export function createDiaryRepository(db: BiteIqDatabase) {
             mealType: input.mealType,
             foodId: input.foodId,
             ...snapshot,
-            quantity: input.quantity,
+            quantity,
             consumedAt: new Date(input.consumedAt),
             updatedAt: new Date(),
           })
@@ -564,3 +570,14 @@ function entryDto(entry: StoredEntry): DiaryEntryDto {
 }
 
 export type DiaryRepository = ReturnType<typeof createDiaryRepository>;
+
+function normalizeInputQuantity(value: string): string {
+  try {
+    return normalizeQuantity(value);
+  } catch {
+    throw new DiaryRepositoryError(
+      "INVALID_QUANTITY",
+      "Quantity must be a positive decimal number within the supported range.",
+    );
+  }
+}

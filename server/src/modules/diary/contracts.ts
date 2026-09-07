@@ -1,3 +1,4 @@
+import { Decimal } from "decimal.js";
 import { z } from "zod";
 
 import type { NutrientValues } from "../foods/contracts.js";
@@ -22,14 +23,18 @@ export const localDateSchema = z
 
 const quantitySchema = z
   .union([z.string(), z.number().finite()])
-  .transform((value) => String(value))
-  .refine(
-    (value) => {
-      const number = Number(value);
-      return Number.isFinite(number) && number > 0 && number <= 1_000_000;
-    },
-    "Quantity must be a positive number within the supported range.",
-  );
+  .transform((value, context) => {
+    try {
+      return normalizeQuantity(value);
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Quantity must be a positive decimal number within the supported range.",
+      });
+      return z.NEVER;
+    }
+  });
 
 const entryValuesSchema = {
   foodId: z.string().uuid(),
@@ -114,6 +119,19 @@ export interface DiaryDayDto {
   localDate: string;
   entries: DiaryEntryDto[];
   summary: DiarySummaryDto;
+}
+
+export function normalizeQuantity(value: string | number): string {
+  const raw = String(value);
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/u.test(raw)) {
+    throw new Error("INVALID_QUANTITY");
+  }
+
+  const normalized = new Decimal(raw).toDecimalPlaces(4, Decimal.ROUND_HALF_UP);
+  if (!normalized.isFinite() || normalized.lte(0) || normalized.gt(1_000_000)) {
+    throw new Error("INVALID_QUANTITY");
+  }
+  return normalized.toFixed(4);
 }
 
 function isCalendarDate(value: string): boolean {
