@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+images:
+  - name: ghcr.io/example/biteiq-api
+    newName: ghcr.io/example/biteiq-api
+    newTag: latest
+patches:
+  - target:
+      kind: Ingress
+      name: biteiq-api
+    patch: |-
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - biteiq.home.arpa
+      - op: add
+        path: /spec/rules/0/host
+        value: biteiq.home.arpa

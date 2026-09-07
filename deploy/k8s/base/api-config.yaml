@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: biteiq-api-config
+data:
+  NODE_ENV: production
+  PORT: "3000"
+  APP_URL: ""
+  CLIENT_ORIGINS: ""
+  OPENFOODFACTS_USER_AGENT: BiteIQ/1.0 (private nutrition tracker)
