@@ -1,0 +1,43 @@
+{
+  "name": "biteiq-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:migrate:prod": "node dist/db/migrate.js",
+    "account:create": "tsx src/scripts/create-account.ts",
+    "account:reset-password": "tsx src/scripts/reset-password.ts"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.7.3",
+    "@better-auth/expo": "^1.7.3",
+    "@fastify/cors": "^11.3.0",
+    "@fastify/rate-limit": "^11.2.0",
+    "better-auth": "^1.7.3",
+    "decimal.js": "^10.6.0",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.12.3",
+    "pg": "^8.23.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.20.1",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.39.5",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.69.0",
+    "vitest": "^3.2.7"
+  }
+}
