@@ -17,8 +17,8 @@ services:
 
   api:
     image: node:22-alpine
-    working_dir: /app
-    command: npm --prefix server run dev
+    working_dir: /app/server
+    command: sh -c "npm ci && npm run dev"
     environment:
       NODE_ENV: development
       HOST: 0.0.0.0
@@ -35,6 +35,8 @@ services:
       - "127.0.0.1:4000:4000"
     volumes:
       - ../:/app
+      - biteiq-api-node-modules:/app/server/node_modules
 
 volumes:
   biteiq-postgres-data:
+  biteiq-api-node-modules:
