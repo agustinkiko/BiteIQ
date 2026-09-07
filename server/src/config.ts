@@ -42,6 +42,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): ServerConfig {
     throw new Error("Invalid server configuration: AUTH_SECRET must be at least 32 characters in production");
   }
 
+  if (
+    NODE_ENV === "production"
+    && clientOrigins.some(isExpoWildcardOrigin)
+  ) {
+    throw new Error(
+      "Invalid server configuration: Expo wildcard origins are not allowed in production",
+    );
+  }
+
   return {
     nodeEnv: NODE_ENV,
     host: HOST,
@@ -52,4 +61,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): ServerConfig {
     clientOrigins,
     ...(USDA_FDC_API_KEY ? { usdaApiKey: USDA_FDC_API_KEY } : {}),
   };
+}
+
+function isExpoWildcardOrigin(origin: string): boolean {
+  const normalized = origin.toLowerCase();
+  return (normalized.startsWith("exp://") || normalized.startsWith("expo://"))
+    && (normalized.includes("*") || normalized.includes("?"));
 }

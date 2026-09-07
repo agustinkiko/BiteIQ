@@ -5,6 +5,7 @@ export const ErrorCode = {
   INVALID_INPUT: "INVALID_INPUT",
   FOOD_NOT_FOUND: "FOOD_NOT_FOUND",
   NUTRITION_PROVIDER_UNAVAILABLE: "NUTRITION_PROVIDER_UNAVAILABLE",
+  DATABASE_UNAVAILABLE: "DATABASE_UNAVAILABLE",
   OFFLINE: "OFFLINE",
   INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
@@ -28,6 +29,20 @@ export function registerErrorHandler(app: {
   ) => void;
 }): void {
   app.setErrorHandler((error, request, reply) => {
+    if (error.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
+      request.log.warn(
+        { err: error, code: ErrorCode.INVALID_INPUT },
+        "request body is too large",
+      );
+      void reply.status(413).send({
+        error: {
+          code: ErrorCode.INVALID_INPUT,
+          message: "Request body is too large.",
+        },
+      });
+      return;
+    }
+
     if (error instanceof ApiError) {
       request.log.warn({ err: error, code: error.code }, "request failed");
       void reply.status(error.statusCode).send({ error: { code: error.code, message: error.message } });

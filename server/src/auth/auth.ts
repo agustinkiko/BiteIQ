@@ -8,11 +8,7 @@ import * as schema from "../db/schema/index.js";
 import type { AuthConfig } from "./types.js";
 
 export function createAuth(db: BiteIqDatabase, config: AuthConfig) {
-  const trustedOrigins = [
-    ...config.clientOrigins,
-    "biteiq://",
-    ...(config.nodeEnv === "development" ? ["exp://**"] : []),
-  ];
+  const trustedOrigins = buildTrustedOrigins(config);
 
   return betterAuth({
     appName: "BiteIQ",
@@ -32,6 +28,7 @@ export function createAuth(db: BiteIqDatabase, config: AuthConfig) {
       expiresIn: 60 * 60 * 24 * 7,
     },
     trustedOrigins,
+    logger: { level: "error" },
     advanced: {
       database: { generateId: "uuid" },
       disableOriginCheck: false,
@@ -47,6 +44,27 @@ export function createAuth(db: BiteIqDatabase, config: AuthConfig) {
       }),
     ],
   });
+}
+
+export function buildTrustedOrigins(config: AuthConfig): string[] {
+  if (
+    config.nodeEnv === "production"
+    && config.clientOrigins.some(isExpoWildcardOrigin)
+  ) {
+    throw new Error("Expo wildcard origins are not allowed in production");
+  }
+
+  return [
+    ...config.clientOrigins,
+    "biteiq://",
+    ...(config.nodeEnv === "development" ? ["exp://**"] : []),
+  ];
+}
+
+function isExpoWildcardOrigin(origin: string): boolean {
+  const normalized = origin.toLowerCase();
+  return (normalized.startsWith("exp://") || normalized.startsWith("expo://"))
+    && (normalized.includes("*") || normalized.includes("?"));
 }
 
 export type BiteIqAuth = ReturnType<typeof createAuth>;

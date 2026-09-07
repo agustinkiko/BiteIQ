@@ -1,4 +1,6 @@
 import { and, eq } from "drizzle-orm";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -11,6 +13,7 @@ import { resetPrivateAccountPassword } from "../../src/scripts/account-reset-pas
 import {
   createIntegrationPool,
   integrationDatabaseUrl,
+  prepareIntegrationDatabase,
   truncateIntegrationDatabase,
 } from "./setup.js";
 
@@ -40,10 +43,20 @@ describe("authenticated session transport and two-user isolation", () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   let userAId: string;
   let userBId: string;
+  let observedExpoOrigins: Array<string | undefined>;
 
   beforeAll(async () => {
+    await prepareIntegrationDatabase();
     pool = createIntegrationPool();
     app = await buildApp({ logger: false, auth });
+    app.addHook("onRequest", async (request) => {
+      if (request.url.startsWith("/api/auth/")) {
+        const origin = request.headers["expo-origin"];
+        observedExpoOrigins.push(
+          Array.isArray(origin) ? origin[0] : origin,
+        );
+      }
+    });
     app.get<{ Params: { id: string } }>(
       "/api/test-private/profiles/:id",
       async (request, reply) => {
@@ -71,6 +84,7 @@ describe("authenticated session transport and two-user isolation", () => {
   });
 
   beforeEach(async () => {
+    observedExpoOrigins = [];
     await truncateIntegrationDatabase(pool);
     userAId = (await auth.api.createUser({ body: userA })).user.id;
     userBId = (await auth.api.createUser({ body: userB })).user.id;
@@ -91,40 +105,25 @@ describe("authenticated session transport and two-user isolation", () => {
     await db.$client.end();
   });
 
-  it("matches the Expo 1.2.12 cookie transport contract against server 1.7.3", async () => {
-    const signIn = await signInUserA();
-    const cookie = cookieHeader(signIn.headers["set-cookie"]);
+  it(
+    "runs the root Expo 1.2.12 client against the server 1.7.3 session protocol",
+    async () => {
+      await app.listen({ host: "127.0.0.1", port: 0 });
+      const address = app.server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Fastify did not bind an ephemeral TCP port");
+      }
 
-    expect(signIn.statusCode).toBe(200);
-    expect(cookie).toMatch(/^better-auth\.session_token=/);
-
-    const session = await app.inject({
-      method: "GET",
-      url: "/api/auth/session",
-      headers: { cookie, "expo-origin": "biteiq://" },
-    });
-
-    expect(session.statusCode).toBe(200);
-    expect(session.json()).toMatchObject({
-      user: { id: userAId, email: userA.email },
-      session: { userId: userAId },
-    });
-
-    const signOut = await app.inject({
-      method: "POST",
-      url: "/api/auth/sign-out",
-      headers: { cookie, "expo-origin": "biteiq://" },
-    });
-    expect(signOut.statusCode).toBe(200);
-
-    const revokedSession = await app.inject({
-      method: "GET",
-      url: "/api/auth/session",
-      headers: { cookie, "expo-origin": "biteiq://" },
-    });
-    expect(revokedSession.statusCode).toBe(200);
-    expect(revokedSession.json()).toBeNull();
-  });
+      await runRootExpoClientProof(
+        `http://127.0.0.1:${address.port}`,
+        userA.email,
+        userA.password,
+        userAId,
+      );
+      expect(observedExpoOrigins).toContain("biteiq://");
+    },
+    20_000,
+  );
 
   it("rejects an expired session", async () => {
     const signIn = await signInUserA();
@@ -222,4 +221,56 @@ function cookieHeader(setCookie: string | string[] | undefined): string {
   }
 
   return rawCookie.split(";", 1)[0] ?? "";
+}
+
+async function runRootExpoClientProof(
+  baseUrl: string,
+  email: string,
+  password: string,
+  userId: string,
+): Promise<void> {
+  const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
+  const jestBin = fileURLToPath(
+    new URL("../../../node_modules/jest/bin/jest.js", import.meta.url),
+  );
+  const configPath = fileURLToPath(
+    new URL("./auth-client-compat.jest.config.cjs", import.meta.url),
+  );
+  const testPath = fileURLToPath(
+    new URL("./auth-client-compat.jest.ts", import.meta.url),
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [jestBin, "--config", configPath, "--runInBand", "--runTestsByPath", testPath],
+      {
+        cwd: repositoryRoot,
+        env: {
+          ...process.env,
+          BITEIQ_COMPAT_BASE_URL: baseUrl,
+          BITEIQ_COMPAT_EMAIL: email,
+          BITEIQ_COMPAT_PASSWORD: password,
+          BITEIQ_COMPAT_USER_ID: userId,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`Root Expo compatibility proof failed:\n${output}`));
+    });
+  });
 }

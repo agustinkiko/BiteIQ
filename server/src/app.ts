@@ -1,27 +1,71 @@
 import Fastify, {
+  LogController,
   type FastifyInstance,
   type FastifyReply,
   type FastifyRequest,
+  type FastifyServerOptions,
 } from "fastify";
 import { fromNodeHeaders } from "better-auth/node";
 
 import type { BiteIqAuth } from "./auth/auth.js";
 import { requireUser, setAuthenticatedUser } from "./auth/guard.js";
-import { registerErrorHandler } from "./errors.js";
+import { ApiError, ErrorCode, registerErrorHandler } from "./errors.js";
 
 type BuildAppOptions = {
-  logger?: boolean;
+  logger?: FastifyServerOptions["logger"];
   auth?: BiteIqAuth;
+  checkDatabaseHealth?: () => Promise<void>;
 };
+
+const bodyLimit = 64 * 1024;
+const redactedLogPaths = [
+  "req.body",
+  "req.headers.authorization",
+  "req.headers.cookie",
+  "req.headers['x-usda-api-key']",
+  "body",
+  "requestBody",
+  "password",
+  "cookie",
+  "providerKey",
+  "diaryContent",
+  "headers.authorization",
+  "headers.cookie",
+  "headers['x-usda-api-key']",
+];
 
 export async function buildApp(
   options: BuildAppOptions = {},
 ): Promise<FastifyInstance> {
-  const app = Fastify({ logger: options.logger ?? true });
+  const requestedLogger = options.logger ?? true;
+  const logger = requestedLogger === false
+    ? false
+    : {
+        ...(requestedLogger === true ? {} : requestedLogger),
+        redact: { paths: redactedLogPaths, remove: true },
+      };
+  const app = Fastify({
+    logger,
+    bodyLimit,
+    logController: new LogController({ disableRequestLogging: true }),
+  });
 
   registerErrorHandler(app);
 
   app.get("/api/health/live", async () => ({ status: "ok" }));
+  app.get("/api/health/ready", async () => {
+    if (!options.checkDatabaseHealth) {
+      throw databaseUnavailableError();
+    }
+
+    try {
+      await options.checkDatabaseHealth();
+    } catch {
+      throw databaseUnavailableError();
+    }
+
+    return { status: "ready" };
+  });
 
   if (options.auth) {
     registerAuthRoutes(app, options.auth);
@@ -49,7 +93,35 @@ export async function buildApp(
     await requireUser(request);
   });
 
+  app.addHook("onResponse", async (request, reply) => {
+    let userId: string | undefined;
+    try {
+      userId = (await requireUser(request)).id;
+    } catch {
+      userId = undefined;
+    }
+
+    request.log.info(
+      {
+        requestId: request.id,
+        route: request.routeOptions.url ?? request.url.split("?", 1)[0],
+        status: reply.statusCode,
+        duration: reply.elapsedTime,
+        ...(userId ? { userId } : {}),
+      },
+      "request completed",
+    );
+  });
+
   return app;
+}
+
+function databaseUnavailableError(): ApiError {
+  return new ApiError(
+    503,
+    ErrorCode.DATABASE_UNAVAILABLE,
+    "The database is unavailable.",
+  );
 }
 
 function registerAuthRoutes(app: FastifyInstance, auth: BiteIqAuth): void {
@@ -86,6 +158,16 @@ async function forwardAuthRequest(
   });
   const response = await auth.handler(authRequest);
 
+  if (
+    url.pathname === "/api/auth/sign-in/email"
+    && response.status === 401
+  ) {
+    return reply.status(401).send({
+      code: "INVALID_EMAIL_OR_PASSWORD",
+      message: "Invalid email or password",
+    });
+  }
+
   reply.status(response.status);
   response.headers.forEach((value, key) => {
     if (key.toLowerCase() !== "set-cookie") {
@@ -112,5 +194,7 @@ async function forwardAuthRequest(
 
 function isPublicRequest(request: FastifyRequest): boolean {
   const path = request.url.split("?", 1)[0];
-  return path === "/api/health/live" || path?.startsWith("/api/auth/") === true;
+  return path === "/api/health/live"
+    || path === "/api/health/ready"
+    || path?.startsWith("/api/auth/") === true;
 }
