@@ -1,63 +1,36 @@
-# BiteIQ Implementation Checklist
+# BiteIQ implementation checklist
 
-## Phase 0: Architecture
+Checked items have focused automated or artifact evidence in the foundation task reports. An unchecked item is not a failed feature; it means the stated acceptance proof has not been recorded.
 
-- [x] Inspect the existing Expo application and uncommitted work.
-- [x] Confirm self-hosted Fastify and PostgreSQL architecture.
-- [x] Confirm two separate email/password accounts.
-- [x] Confirm private LAN/VPN access.
-- [x] Approve the Phase 1 and Phase 2 design specification.
-- [ ] Complete the implementation plan review.
+## Foundation
 
-## Phase 1: Foundation
+- [x] Fastify server package, test harness, normalized errors, and liveness route.
+- [x] PostgreSQL/Drizzle configuration and checked-in initial migrations.
+- [x] Private email/password authentication with disabled public sign-up.
+- [x] Interactive account creation and password reset commands.
+- [x] Profile persistence, onboarding APIs, Mifflin-St Jeor calculations, manual calorie targets, and macro target modes.
+- [x] Server-side canonical food, serving, nutrient, provenance, and diary snapshot model.
+- [x] Server-side USDA provider contract, deterministic decimal portion calculation, local-first search, and provider upsert behavior.
+- [x] Authenticated food search/detail and diary create, edit, delete, and transactional daily-summary routes.
+- [x] Client login/onboarding, server-backed goals, and food search/detail in focused tests.
+- [x] API liveness/readiness behavior, safe request-completion logging, request-body limit, and production image build.
 
-- [ ] Add the Fastify server package and test harness.
-- [ ] Add PostgreSQL and Drizzle configuration.
-- [ ] Create and verify the first database migration.
-- [ ] Add private email/password authentication.
-- [ ] Add server-only account creation and password reset commands.
-- [ ] Prove User A cannot access User B's records.
-- [ ] Add profile persistence and onboarding APIs.
-- [ ] Add Mifflin-St Jeor BMR and TDEE calculations.
-- [ ] Preserve manually entered calorie targets.
-- [ ] Add macro percentage and exact-gram targets.
-- [ ] Connect login and onboarding screens to the API.
+## Operations and documentation
 
-## Phase 2: Real Nutrition
+- [x] `.env.example` documents server and Expo API URL configuration without a secret value.
+- [x] Local Docker Compose harness is defined for PostgreSQL and API development.
+- [x] K3s base/example manifests and migration overlay render locally without embedded Secret values.
+- [x] Private K3s deployment and PostgreSQL backup/restore procedures are documented.
+- [x] API, USDA attribution/cache/storage/update policy, setup, and recovery documentation are present.
 
-- [ ] Add canonical nutrients, foods, aliases, servings, and provenance.
-- [ ] Add the server-side nutrition-provider interface.
-- [ ] Add the USDA FoodData Central provider.
-- [ ] Add local-first food search and USDA fallback.
-- [ ] Keep USDA credentials out of the Expo client.
-- [ ] Add deterministic serving and nutrient calculations.
-- [ ] Preserve full decimal precision until display.
-- [ ] Add persistent diary days and nutrition snapshots.
-- [ ] Add, edit, and delete diary entries through the API.
-- [ ] Recompute daily summaries transactionally.
-- [ ] Connect food search, food detail, diary, and dashboard screens to the API.
-- [ ] Add recent-food ranking per user.
+## Verification gates still required
 
-## Operations
-
-- [ ] Add `.env.example` without secrets.
-- [ ] Add Docker Compose development services.
-- [ ] Add K3s API, migration, PostgreSQL, storage, service, and ingress manifests.
-- [ ] Add health and readiness checks.
-- [ ] Document PostgreSQL backup and restore.
-- [ ] Document USDA attribution, caching, storage, and licensing.
-- [ ] Update README and API documentation.
-
-## Verification Gates
-
-- [ ] Server unit tests pass.
-- [ ] Server integration and authorization tests pass against PostgreSQL.
-- [ ] Client tests pass.
-- [ ] Type checks pass for the client and server.
-- [ ] Lint passes for the client and server.
-- [ ] Production builds pass for the client and server.
-- [ ] Docker Compose health checks pass.
-- [ ] K3s manifests render with no embedded secret values.
-- [ ] Two real accounts can sign in and retain separate persisted diaries.
-- [ ] A real USDA food can be searched, served, logged, edited, and deleted.
-- [ ] Restarting the API and client preserves both users' histories.
+- [ ] Run the complete fresh server unit, integration, client, typecheck, lint, and production-build suites and record their exact counts.
+- [ ] Start Compose from a clean explicitly named volume, migrate it, and prove liveness and readiness against that runtime.
+- [ ] Create two real private accounts, sign in interactively on the client, and prove separate persisted profiles and diaries.
+- [ ] Run a real USDA search with an operator-supplied server key; select a serving, log, edit, and delete it.
+- [ ] Verify and accept client diary add/edit wiring and the limited offline new-entry queue (Task 12).
+- [ ] Restart the API and client and prove both users' histories persist.
+- [ ] Build Expo web output and prove configured/provider secrets are absent from the bundle and passwords are absent from logs.
+- [ ] Apply the K3s release sequence to the target private cluster, wait for migrations and rollout, and verify live liveness/readiness.
+- [ ] Perform and verify a disposable PostgreSQL restore from an encrypted backup before relying on recovery.
