@@ -13,6 +13,7 @@ Checked items have focused automated or artifact evidence in the foundation task
 - [x] Server-side USDA provider contract, deterministic decimal portion calculation, local-first search, and provider upsert behavior.
 - [x] Authenticated food search/detail and diary create, edit, delete, and transactional daily-summary routes.
 - [x] Client login/onboarding, server-backed goals, and food search/detail in focused tests.
+- [x] Client diary add/edit wiring and limited offline new-entry queue, Task 12 review-approved (93 client tests).
 - [x] API liveness/readiness behavior, safe request-completion logging, request-body limit, and production image build.
 
 ## Operations and documentation
@@ -23,14 +24,13 @@ Checked items have focused automated or artifact evidence in the foundation task
 - [x] Private K3s deployment and PostgreSQL backup/restore procedures are documented.
 - [x] API, USDA attribution/cache/storage/update policy, setup, and recovery documentation are present.
 
-## Verification gates still required
+## Verification gates
 
-- [ ] Run the complete fresh server unit, integration, client, typecheck, lint, and production-build suites and record their exact counts.
-- [ ] Start Compose from a clean explicitly named volume, migrate it, and prove liveness and readiness against that runtime.
-- [ ] Create two real private accounts, sign in interactively on the client, and prove separate persisted profiles and diaries.
+- [x] Fresh verification: 11 client suites/93 tests, 9 server unit files/71 tests, and 8 server integration files/77 tests passed; both typechecks, both lints, the server build, the production image build, and the Expo web export passed.
+- [x] A clean `biteiq_acceptance` Compose project with newly named volumes was migrated; liveness and readiness returned `200`; its disposable containers and volumes were then removed and the normal local stack was restored healthy.
+- [ ] Complete a two-person client/device walkthrough. API-level acceptance already created two disposable private accounts and proved separate profiles, goals, and diaries; interactive client sign-in remains.
 - [ ] Run a real USDA search with an operator-supplied server key; select a serving, log, edit, and delete it.
-- [ ] Verify and accept client diary add/edit wiring and the limited offline new-entry queue (Task 12).
-- [ ] Restart the API and client and prove both users' histories persist.
-- [ ] Build Expo web output and prove configured/provider secrets are absent from the bundle and passwords are absent from logs.
+- [ ] Restart both the API and client and prove both users' histories persist. API-level acceptance already proved a diary survives an API restart; the client restart remains.
+- [x] Expo web exported 24 files (6,172 KiB); the bundle had zero secret-name matches, and the structured API log scans had zero password or credential matches.
 - [ ] Apply the K3s release sequence to the target private cluster, wait for migrations and rollout, and verify live liveness/readiness.
 - [ ] Perform and verify a disposable PostgreSQL restore from an encrypted backup before relying on recovery.
