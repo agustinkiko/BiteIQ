@@ -33,6 +33,6 @@ Checked items have focused automated or artifact evidence in the foundation task
 - [ ] Complete a two-person client/device walkthrough. API-level acceptance already created two disposable private accounts and proved separate profiles, goals, and diaries; interactive client sign-in remains.
 - [ ] Run a real USDA search with an operator-supplied server key; select a serving, log, edit, and delete it.
 - [ ] Restart both the API and client and prove both users' histories persist. API-level acceptance already proved a diary survives an API restart; the client restart remains.
-- [x] Expo web exported 24 files (6,172 KiB); the bundle had zero secret-name matches, and the structured API log scans had zero password or credential matches.
+- [x] Expo web exported 24 files (6,176 KiB); the bundle had zero secret-name matches, and the structured API log scans had zero password or credential matches.
 - [ ] Apply the K3s release sequence to the target private cluster, wait for migrations and rollout, and verify live liveness/readiness.
 - [ ] Perform and verify a disposable PostgreSQL restore from an encrypted backup before relying on recovery.
