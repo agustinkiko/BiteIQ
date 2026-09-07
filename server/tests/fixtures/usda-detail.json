@@ -1,0 +1,23 @@
+{
+  "fdcId": 171077,
+  "description": "Chicken, broilers or fryers, breast, meat only, cooked, roasted",
+  "dataType": "Foundation",
+  "foodCategory": { "description": "Poultry Products" },
+  "publicationDate": "2019-04-01",
+  "foodNutrients": [
+    { "amount": 165, "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" } },
+    { "amount": 31.02, "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" } },
+    { "amount": 0, "nutrient": { "id": 1005, "name": "Carbohydrate, by difference", "unitName": "g" } },
+    { "amount": 3.57, "nutrient": { "id": 1004, "name": "Total lipid (fat)", "unitName": "g" } }
+  ],
+  "foodPortions": [
+    {
+      "id": 87700,
+      "amount": 1,
+      "gramWeight": 172,
+      "modifier": "breast",
+      "portionDescription": "1 breast",
+      "measureUnit": { "id": 9999, "name": "undetermined", "abbreviation": "undetermined" }
+    }
+  ]
+}

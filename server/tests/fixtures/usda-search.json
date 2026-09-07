@@ -1,0 +1,59 @@
+{
+  "totalHits": 3,
+  "currentPage": 1,
+  "totalPages": 1,
+  "foods": [
+    {
+      "fdcId": 171077,
+      "description": "Chicken, broilers or fryers, breast, meat only, cooked, roasted",
+      "dataType": "Foundation",
+      "foodCategory": "Poultry Products",
+      "publicationDate": "2019-04-01",
+      "foodNutrients": [
+        { "nutrientId": 1008, "nutrientName": "Energy", "unitName": "KCAL", "value": 165 },
+        { "nutrientId": 1003, "nutrientName": "Protein", "unitName": "G", "value": 31.02 },
+        { "nutrientId": 1005, "nutrientName": "Carbohydrate, by difference", "unitName": "G", "value": 0 },
+        { "nutrientId": 1004, "nutrientName": "Total lipid (fat)", "unitName": "G", "value": 3.57 }
+      ],
+      "foodMeasures": [
+        { "disseminationText": "1 breast", "gramWeight": 172, "modifier": "breast", "rank": 1 }
+      ]
+    },
+    {
+      "fdcId": 2346395,
+      "description": "Oatmeal, cooked, with water",
+      "dataType": "Survey (FNDDS)",
+      "foodCategory": "Cereal Grains and Pasta",
+      "publicationDate": "2022-10-28",
+      "foodNutrients": [
+        { "nutrientId": 1062, "nutrientName": "Energy", "unitName": "KJ", "value": 418.4 },
+        { "nutrientId": 1003, "nutrientName": "Protein", "unitName": "G", "value": 2.54 },
+        { "nutrientId": 1005, "nutrientName": "Carbohydrate, by difference", "unitName": "G", "value": 12 },
+        { "nutrientId": 1004, "nutrientName": "Total lipid (fat)", "unitName": "G", "value": 1.52 }
+      ],
+      "foodMeasures": [
+        { "disseminationText": "1 cup", "gramWeight": 234, "modifier": "cup", "rank": 1 }
+      ]
+    },
+    {
+      "fdcId": 2644829,
+      "description": "Greek Yogurt, Plain",
+      "dataType": "Branded",
+      "brandOwner": "Example Dairy Company",
+      "brandName": "Example Dairy",
+      "foodCategory": "Yogurt",
+      "publicationDate": "2024-01-18",
+      "modifiedDate": "2024-01-12",
+      "servingSize": 170,
+      "servingSizeUnit": "g",
+      "householdServingFullText": "1 container",
+      "foodNutrients": [
+        { "nutrientId": 1008, "nutrientName": "Energy", "unitName": "KCAL", "value": 59 },
+        { "nutrientId": 1062, "nutrientName": "Energy", "unitName": "KJ", "value": 246.856 },
+        { "nutrientId": 1003, "nutrientName": "Protein", "unitName": "G", "value": 10 },
+        { "nutrientId": 1005, "nutrientName": "Carbohydrate, by difference", "unitName": "G", "value": 3.6 },
+        { "nutrientId": 1004, "nutrientName": "Total lipid (fat)", "unitName": "G", "value": 0.4 }
+      ]
+    }
+  ]
+}
