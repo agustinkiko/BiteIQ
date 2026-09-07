@@ -2,8 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: biteiq-api
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: 2
   strategy:

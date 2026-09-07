@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../base
+  - https-redirect.yaml
 images:
   - name: ghcr.io/example/biteiq-api
     newName: ghcr.io/example/biteiq-api
@@ -16,6 +17,15 @@ patches:
         value:
           - hosts:
               - biteiq.home.arpa
+            secretName: biteiq-home-arpa-tls
+      - op: add
+        path: /spec/ingressClassName
+        value: traefik
+      - op: add
+        path: /metadata/annotations
+        value:
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.tls: "true"
       - op: add
         path: /spec/rules/0/host
         value: biteiq.home.arpa

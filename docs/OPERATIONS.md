@@ -9,11 +9,28 @@ real Secret named `biteiq-secrets` in the `biteiq` namespace from
 resulting values. Set `DATABASE_URL` to the in-cluster PostgreSQL service, for example
 `postgresql://<user>:<password>@biteiq-postgres:5432/<database>?sslmode=disable`.
 
-Set the API image tag in `deploy/k8s/example/kustomization.yaml`, then apply it:
+Set the API image name and tag in both
+`deploy/k8s/example/kustomization.yaml` and
+`deploy/k8s/example/migration/kustomization.yaml`. Before applying anything,
+create the TLS Secret named `biteiq-home-arpa-tls` in namespace `biteiq`. It
+must contain the `tls.crt` and `tls.key` for `biteiq.home.arpa`. The checked-in
+example uses K3s Traefik: `websecure` serves TLS, and its `web` entrypoint
+redirects to HTTPS through the included Traefik Middleware.
+
+Use this release sequence. It recreates only the short-lived migration Job so
+an image change never tries to mutate the Job pod template. It waits for the
+migration before applying or rolling the API deployment; it does not delete the
+PostgreSQL StatefulSet, claim, Service, ConfigMap, or Secret:
 
 ```sh
-kubectl apply -k deploy/k8s/example
+NAMESPACE=biteiq
+kubectl apply -f deploy/k8s/base/namespace.yaml
+kubectl -n "$NAMESPACE" apply -f deploy/k8s/base/api-config.yaml -f deploy/k8s/base/postgres-service.yaml -f deploy/k8s/base/postgres-statefulset.yaml
+kubectl -n "$NAMESPACE" rollout status statefulset/biteiq-postgres --timeout=5m
+kubectl -n "$NAMESPACE" delete job/biteiq-migrate --ignore-not-found
+kubectl apply -k deploy/k8s/example/migration
 kubectl -n biteiq wait --for=condition=complete job/biteiq-migrate --timeout=5m
+kubectl apply -k deploy/k8s/example
 kubectl -n biteiq rollout status deployment/biteiq-api --timeout=5m
 ```
 
@@ -79,3 +96,9 @@ kubectl -n "$NAMESPACE" scale deployment/biteiq-api --replicas=2
 ```
 
 Confirm the API rollout and readiness after recovery before allowing use.
+If the restore command fails after the API was scaled down, immediately bring
+the API back before investigating further:
+
+```sh
+kubectl -n "$NAMESPACE" scale deployment/biteiq-api --replicas=2
+```
