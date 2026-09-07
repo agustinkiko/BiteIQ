@@ -28,7 +28,7 @@ Checked items have focused automated or artifact evidence in the foundation task
 
 ## Verification gates
 
-- [x] Fresh verification: 12 client suites/110 tests, 11 server unit files/76 tests, and 8 server integration files/77 tests passed; both typechecks, both lints, the server build, the production image build, and the Expo web export passed.
+- [x] Fresh verification: 13 client suites/115 tests, 11 server unit files/76 tests, and 8 server integration files/77 tests passed; both typechecks, both lints, the server build, the production image build, and the Expo web export passed.
 - [x] A clean `biteiq_acceptance` Compose project with newly named volumes was migrated; liveness and readiness returned `200`; its disposable containers and volumes were then removed and the normal local stack was restored healthy.
 - [ ] Complete a two-person client/device walkthrough. API-level acceptance already created two disposable private accounts and proved separate profiles, goals, and diaries; interactive client sign-in remains.
 - [ ] Run a real USDA search with an operator-supplied server key; select a serving, log, edit, and delete it.
