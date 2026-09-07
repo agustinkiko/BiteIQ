@@ -160,15 +160,11 @@ function normalizedNutrition(food: JsonRecord): {
 }
 
 function normalizedVerificationState(dataType: string): VerificationState {
-  const normalized = dataType.toLocaleLowerCase();
-  if (
-    normalized.includes("foundation") ||
-    normalized.includes("fndds") ||
-    normalized.includes("sr legacy")
-  ) {
+  const normalized = dataType.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+  if (["foundation", "survey (fndds)", "fndds", "sr legacy"].includes(normalized)) {
     return "verified_authoritative";
   }
-  if (normalized.includes("branded")) return "verified_manufacturer";
+  if (normalized === "branded") return "verified_manufacturer";
   return "unverified";
 }
 
@@ -279,7 +275,7 @@ function normalizeFood(value: unknown): ProviderFood {
     brand: optionalString(food.brandName) ?? optionalString(food.brandOwner),
     description: name,
     category: normalizedCategory(food),
-    foodType: dataType.toLocaleLowerCase().includes("branded") ? "branded" : "generic",
+    foodType: dataType.trim().toLocaleLowerCase() === "branded" ? "branded" : "generic",
     preparationState: preparationState(name),
     ingredientsText: optionalString(food.ingredients),
     verificationState: normalizedVerificationState(dataType),

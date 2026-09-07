@@ -48,6 +48,18 @@ describe("development nutrition provider", () => {
     await expect(provider.getFood("unknown")).resolves.toBeNull();
   });
 
+  it.each([
+    { query: "", limit: 10 },
+    { query: "   ", limit: 10 },
+    { query: "chicken", limit: 0 },
+    { query: "chicken", limit: 51 },
+    { query: "chicken", limit: 1.5 },
+  ])("rejects invalid search input $query/$limit", async (input) => {
+    const provider = createDevelopmentNutritionProvider({ nodeEnv: "test" });
+
+    await expect(provider.searchFoods(input)).rejects.toThrow("INVALID_FOOD_SEARCH_INPUT");
+  });
+
   it("cannot be constructed in production", () => {
     expect(() => createDevelopmentNutritionProvider({ nodeEnv: "production" })).toThrow(
       "DEVELOPMENT_PROVIDER_DISABLED",

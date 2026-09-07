@@ -56,7 +56,10 @@ export function createDevelopmentNutritionProvider(
     id: "development",
     async searchFoods(input) {
       const query = input.query.trim().toLocaleLowerCase();
-      if (input.limit < 1 || !chickenFixture.name.toLocaleLowerCase().includes(query)) {
+      if (!query || !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 50) {
+        throw new Error("INVALID_FOOD_SEARCH_INPUT");
+      }
+      if (!chickenFixture.name.toLocaleLowerCase().includes(query)) {
         return [];
       }
       return [cloneFixture()].slice(0, input.limit);

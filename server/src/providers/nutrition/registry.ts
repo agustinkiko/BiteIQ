@@ -4,11 +4,13 @@ import { createUsdaProvider } from "./usda.js";
 
 export interface NutritionRegistryConfig {
   nodeEnv: string;
-  usdaApiKey: string;
+  usdaApiKey?: string;
 }
 
 export function createNutritionRegistry(config: NutritionRegistryConfig): NutritionProviderRegistry {
-  const providers: NutritionProvider[] = [createUsdaProvider({ apiKey: config.usdaApiKey })];
+  const providers: NutritionProvider[] = [];
+  const usdaApiKey = config.usdaApiKey?.trim();
+  if (usdaApiKey) providers.push(createUsdaProvider({ apiKey: usdaApiKey }));
   if (config.nodeEnv !== "production") {
     providers.push(createDevelopmentNutritionProvider({ nodeEnv: config.nodeEnv }));
   }

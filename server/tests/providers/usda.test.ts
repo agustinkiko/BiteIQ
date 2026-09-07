@@ -105,6 +105,16 @@ describe("USDA nutrition provider", () => {
     expect(foods[2]?.calories).toBe("59.000000");
   });
 
+  it("does not trust dataset names that merely contain Foundation", async () => {
+    const payload = copyFixture();
+    payload.foods[0] = { ...payload.foods[0], dataType: "Not Foundation" };
+    const provider = createUsdaProvider({ apiKey }, fetchReturning(payload));
+
+    const foods = await provider.searchFoods({ query: "chicken", limit: 10 });
+
+    expect(foods[0]?.verificationState).toBe("unverified");
+  });
+
   it("retrieves and normalizes USDA detail records", async () => {
     const requestedUrls: string[] = [];
     const fetchImpl = vi.fn(async (input: string | URL | Request) => {
@@ -333,5 +343,19 @@ describe("nutrition provider registry", () => {
 
     expect(registry.list().map((provider) => provider.id)).toEqual(["usda"]);
     expect(registry.get("development")).toBeUndefined();
+  });
+
+  it("keeps development available when USDA is not configured", () => {
+    const registry = createNutritionRegistry({ nodeEnv: "development" });
+
+    expect(registry.list().map((provider) => provider.id)).toEqual(["development"]);
+    expect(registry.get("usda")).toBeUndefined();
+  });
+
+  it("has no nutrition providers in production when USDA is not configured", () => {
+    const registry = createNutritionRegistry({ nodeEnv: "production" });
+
+    expect(registry.list()).toEqual([]);
+    expect(registry.get("usda")).toBeUndefined();
   });
 });

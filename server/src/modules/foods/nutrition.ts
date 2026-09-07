@@ -58,6 +58,9 @@ export function calculateServingNutrition(
   serving: FoodServing,
   quantity: string,
 ): NutrientSnapshot {
+  if (!(["serving", "g", "ml"] as string[]).includes(serving.unit)) {
+    throw new Error("UNSUPPORTED_SERVING_UNIT");
+  }
   const servingCount = positiveDecimal(quantity, "INVALID_QUANTITY");
   const sourceBasis = positiveDecimal(food.basisQuantity, "INVALID_NUTRITION_BASIS");
 

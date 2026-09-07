@@ -89,4 +89,12 @@ describe("calculateServingNutrition", () => {
       consumedMilliliters: "125.0000",
     });
   });
+
+  it("rejects an unsupported serving unit even when a gram weight is present", () => {
+    const ounceServing = { ...serving150g, unit: "oz" as FoodServing["unit"] };
+
+    expect(() => calculateServingNutrition(chickenPer100g, ounceServing, "1")).toThrow(
+      "UNSUPPORTED_SERVING_UNIT",
+    );
+  });
 });
