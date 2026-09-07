@@ -9,11 +9,18 @@ import { fromNodeHeaders } from "better-auth/node";
 
 import type { BiteIqAuth } from "./auth/auth.js";
 import { requireUser, setAuthenticatedUser } from "./auth/guard.js";
+import type { BiteIqDatabase } from "./db/client.js";
 import { ApiError, ErrorCode, registerErrorHandler } from "./errors.js";
+import { diaryRoutes } from "./modules/diary/routes.js";
+import { foodRoutes } from "./modules/foods/routes.js";
+import { goalsRoutes } from "./modules/goals/routes.js";
+import type { NutritionProviderRegistry } from "./providers/nutrition/types.js";
 
-type BuildAppOptions = {
+export type BuildAppOptions = {
   logger?: FastifyServerOptions["logger"];
   auth?: BiteIqAuth;
+  db?: BiteIqDatabase;
+  nutritionProviders?: NutritionProviderRegistry;
   checkDatabaseHealth?: () => Promise<void>;
 };
 
@@ -112,6 +119,21 @@ export async function buildApp(
       "request completed",
     );
   });
+
+  if (options.db) {
+    if (!options.nutritionProviders) {
+      throw new Error(
+        "A nutrition provider registry is required when application routes are enabled.",
+      );
+    }
+
+    await app.register(goalsRoutes, { db: options.db });
+    await app.register(foodRoutes, {
+      db: options.db,
+      providers: options.nutritionProviders,
+    });
+    await app.register(diaryRoutes, { db: options.db });
+  }
 
   return app;
 }

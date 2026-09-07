@@ -7,6 +7,7 @@ import { buildApp } from "./app.js";
 import { createAuth } from "./auth/auth.js";
 import { loadConfig, type ServerConfig } from "./config.js";
 import { createDb } from "./db/client.js";
+import { createNutritionRegistry } from "./providers/nutrition/registry.js";
 
 type DatabaseClient = {
   end: () => Promise<void>;
@@ -18,12 +19,14 @@ type ServerDependencies = {
   createDb: typeof createDb;
   createAuth: typeof createAuth;
   buildApp: typeof buildApp;
+  createNutritionRegistry?: typeof createNutritionRegistry;
 };
 
 const defaultDependencies: ServerDependencies = {
   createDb,
   createAuth,
   buildApp,
+  createNutritionRegistry,
 };
 
 export async function closeServerResources(
@@ -46,8 +49,13 @@ export async function startServer(
 
   try {
     const auth = dependencies.createAuth(db, config);
+    const nutritionProviders = (
+      dependencies.createNutritionRegistry ?? createNutritionRegistry
+    )(config);
     app = await dependencies.buildApp({
       auth,
+      db,
+      nutritionProviders,
       checkDatabaseHealth: async () => {
         await db.execute(sql`select 1`);
       },
