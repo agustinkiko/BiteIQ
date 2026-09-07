@@ -19,7 +19,7 @@ type ServerDependencies = {
   createDb: typeof createDb;
   createAuth: typeof createAuth;
   buildApp: typeof buildApp;
-  createNutritionRegistry?: typeof createNutritionRegistry;
+  createNutritionRegistry: typeof createNutritionRegistry;
 };
 
 const defaultDependencies: ServerDependencies = {
@@ -49,9 +49,7 @@ export async function startServer(
 
   try {
     const auth = dependencies.createAuth(db, config);
-    const nutritionProviders = (
-      dependencies.createNutritionRegistry ?? createNutritionRegistry
-    )(config);
+    const nutritionProviders = dependencies.createNutritionRegistry(config);
     app = await dependencies.buildApp({
       auth,
       db,

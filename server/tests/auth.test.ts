@@ -4,7 +4,7 @@ import type { ReadStream, WriteStream } from "node:tty";
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 
-import { buildApp } from "../src/app.js";
+import { buildApp, type BuildAppOptions } from "../src/app.js";
 import { buildTrustedOrigins } from "../src/auth/auth.js";
 import { requireUser } from "../src/auth/guard.js";
 import type { BetterAuthInstance } from "../src/auth/types.js";
@@ -222,10 +222,61 @@ describe("server resource cleanup", () => {
       startServer(testServerConfig(), {
         createDb: () => ({ $client: { end } }) as never,
         createAuth: () => ({}) as never,
+        createNutritionRegistry: () => ({}) as never,
         buildApp: async () => ({ close, listen, log: { info: vi.fn() } }) as never,
       }),
     ).rejects.toThrow("listen failed");
 
+    expect(close).toHaveBeenCalledOnce();
+    expect(end).toHaveBeenCalledOnce();
+  });
+});
+
+describe("server composition", () => {
+  it("passes the configured database, auth, nutrition registry, and readiness check to the app", async () => {
+    const config = testServerConfig();
+    const execute = vi.fn().mockResolvedValue(undefined);
+    const end = vi.fn().mockResolvedValue(undefined);
+    const db = { execute, $client: { end } } as never;
+    const auth = { name: "test-auth" } as never;
+    const nutritionProviders = {
+      get: vi.fn(),
+      list: vi.fn(() => []),
+    };
+    const createDb = vi.fn(() => db);
+    const createAuth = vi.fn(() => auth);
+    const createNutritionRegistry = vi.fn(() => nutritionProviders);
+    const listen = vi.fn().mockResolvedValue(undefined);
+    const close = vi.fn().mockResolvedValue(undefined);
+    const buildOptions: BuildAppOptions[] = [];
+    const buildConfiguredApp = vi.fn(async (options: BuildAppOptions) => {
+      buildOptions.push(options);
+      return { close, listen, log: { info: vi.fn() } } as never;
+    });
+
+    const runtime = await startServer(config, {
+      createDb,
+      createAuth,
+      createNutritionRegistry,
+      buildApp: buildConfiguredApp,
+    });
+
+    expect(createDb).toHaveBeenCalledWith(config.databaseUrl);
+    expect(createAuth).toHaveBeenCalledWith(db, config);
+    expect(createNutritionRegistry).toHaveBeenCalledWith(config);
+    expect(buildOptions).toEqual([
+      {
+        db,
+        auth,
+        nutritionProviders,
+        checkDatabaseHealth: expect.any(Function),
+      },
+    ]);
+    await buildOptions[0]?.checkDatabaseHealth?.();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(listen).toHaveBeenCalledWith({ host: config.host, port: config.port });
+
+    await runtime.shutdown("SIGTERM");
     expect(close).toHaveBeenCalledOnce();
     expect(end).toHaveBeenCalledOnce();
   });

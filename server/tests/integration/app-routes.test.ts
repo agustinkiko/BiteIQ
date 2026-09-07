@@ -6,7 +6,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { buildApp } from "../../src/app.js";
 import type { BiteIqAuth } from "../../src/auth/auth.js";
 import { createDb } from "../../src/db/client.js";
-import type { NutritionProviderRegistry } from "../../src/providers/nutrition/types.js";
+import type {
+  NutritionProviderRegistry,
+  ProviderFood,
+} from "../../src/providers/nutrition/types.js";
 import {
   createIntegrationPool,
   integrationDatabaseUrl,
@@ -14,6 +17,7 @@ import {
 } from "./setup.js";
 
 const userId = randomUUID();
+const searchProviderFoods = vi.fn(async (): Promise<ProviderFood[]> => []);
 
 describe("shared Fastify application", () => {
   const db = createDb(integrationDatabaseUrl);
@@ -27,7 +31,7 @@ describe("shared Fastify application", () => {
       logger: false,
       db,
       auth: testAuth(),
-      nutritionProviders: emptyNutritionRegistry(),
+      nutritionProviders: sentinelNutritionRegistry(),
       checkDatabaseHealth,
     });
     await app.ready();
@@ -35,6 +39,7 @@ describe("shared Fastify application", () => {
 
   beforeEach(async () => {
     checkDatabaseHealth.mockClear();
+    searchProviderFoods.mockClear();
     await truncateIntegrationDatabase(pool);
     await pool.query(
       `INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
@@ -51,11 +56,15 @@ describe("shared Fastify application", () => {
 
   it("mounts authenticated goals, foods, and diary routes with health routes", async () => {
     const headers = { cookie: "biteiq-test-session=valid" };
-    const [live, ready, profile, foods, diary] = await Promise.all([
+    const [live, ready, goals, foods, diary] = await Promise.all([
       app.inject({ method: "GET", url: "/api/health/live" }),
       app.inject({ method: "GET", url: "/api/health/ready" }),
-      app.inject({ method: "GET", url: "/api/me", headers }),
-      app.inject({ method: "GET", url: "/api/foods/search?q=x", headers }),
+      app.inject({ method: "GET", url: "/api/goals", headers }),
+      app.inject({
+        method: "GET",
+        url: "/api/foods/search?q=sentinel-food&limit=1",
+        headers,
+      }),
       app.inject({ method: "GET", url: "/api/diary/2026-09-08", headers }),
     ]);
 
@@ -64,10 +73,14 @@ describe("shared Fastify application", () => {
     expect(ready.statusCode).toBe(200);
     expect(ready.json()).toEqual({ status: "ready" });
     expect(checkDatabaseHealth).toHaveBeenCalledOnce();
-    expect(profile.statusCode).toBe(200);
-    expect(profile.json()).toEqual({ profile: null });
+    expect(goals.statusCode).toBe(200);
+    expect(goals.json()).toEqual({ goal: null });
     expect(foods.statusCode).toBe(200);
     expect(foods.json()).toEqual({ foods: [], warnings: [] });
+    expect(searchProviderFoods).toHaveBeenCalledWith({
+      query: "sentinel-food",
+      limit: 1,
+    });
     expect(diary.statusCode).toBe(200);
     expect(diary.json()).toEqual({
       diary: {
@@ -83,14 +96,14 @@ describe("shared Fastify application", () => {
   });
 
   it("keeps application routes private while health routes stay public", async () => {
-    const [profile, foods, diary, live] = await Promise.all([
-      app.inject({ method: "GET", url: "/api/me" }),
+    const [goals, foods, diary, live] = await Promise.all([
+      app.inject({ method: "GET", url: "/api/goals" }),
       app.inject({ method: "GET", url: "/api/foods/search?q=x" }),
       app.inject({ method: "GET", url: "/api/diary/2026-09-08" }),
       app.inject({ method: "GET", url: "/api/health/live" }),
     ]);
 
-    for (const response of [profile, foods, diary]) {
+    for (const response of [goals, foods, diary]) {
       expect(response.statusCode).toBe(401);
       expect(response.json()).toEqual({
         error: { code: "AUTH_REQUIRED", message: "Sign in to continue." },
@@ -120,9 +133,21 @@ function testAuth(): BiteIqAuth {
   } as unknown as BiteIqAuth;
 }
 
-function emptyNutritionRegistry(): NutritionProviderRegistry {
+function sentinelNutritionRegistry(): NutritionProviderRegistry {
+  const provider = {
+    id: "usda",
+    searchFoods: searchProviderFoods,
+    getFood: async () => null,
+    lookupBarcode: async () => null,
+    providerMetadata: () => ({
+      id: "usda",
+      displayName: "Sentinel nutrition provider",
+      attribution: "Test fixture",
+    }),
+  };
+
   return {
-    get: () => undefined,
-    list: () => [],
+    get: (id) => (id === provider.id ? provider : undefined),
+    list: () => [provider],
   };
 }
