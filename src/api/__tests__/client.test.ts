@@ -41,16 +41,46 @@ describe("apiRequest", () => {
 
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe("https://biteiq.test/api/diary/2026-09-08");
-    expect(options).toEqual(
-      expect.objectContaining({
-        credentials: "include",
-        headers: expect.objectContaining({
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          Cookie: "better-auth.session_token=session-value"
-        })
-      })
-    );
+    const headers = new Headers(options?.headers);
+    expect(options?.credentials).toBe("include");
+    expect(headers.get("accept")).toBe("application/json");
+    expect(headers.get("content-type")).toBe("application/json");
+    expect(headers.get("cookie")).toBe("better-auth.session_token=session-value");
+  });
+
+  it("replaces a lowercase caller cookie in object headers with the secure cookie", async () => {
+    fetchMock.mockResolvedValue(response(200, { ok: true }));
+
+    await apiRequest("/profile", {
+      headers: { cookie: "caller-cookie=must-not-leak", "X-Request-ID": "request-a" }
+    });
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get("cookie")).toBe("better-auth.session_token=session-value");
+    expect(headers.get("x-request-id")).toBe("request-a");
+  });
+
+  it("replaces a caller cookie in Headers with the secure cookie", async () => {
+    fetchMock.mockResolvedValue(response(200, { ok: true }));
+    const callerHeaders = new Headers({ COOKIE: "caller-cookie=must-not-leak" });
+
+    await apiRequest("/profile", { headers: callerHeaders });
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.get("cookie")).toBe("better-auth.session_token=session-value");
+  });
+
+  it("removes every caller cookie when SecureStore has no session cookie", async () => {
+    mockGetCookie.mockReturnValue("");
+    fetchMock.mockResolvedValue(response(200, { ok: true }));
+
+    await apiRequest("/profile", {
+      headers: { Cookie: "caller-cookie=must-not-leak", Accept: "application/problem+json" }
+    });
+
+    const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+    expect(headers.has("cookie")).toBe(false);
+    expect(headers.get("accept")).toBe("application/problem+json");
   });
 
   it("maps an unauthorized response to AUTH_REQUIRED", async () => {

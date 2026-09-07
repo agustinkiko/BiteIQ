@@ -8,13 +8,17 @@ const JSON_HEADERS = {
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const cookie = authClient.getCookie();
-  const headers: Record<string, string> = {
-    ...JSON_HEADERS,
-    ...toHeaderRecord(options.headers)
-  };
+  const headers = new Headers(JSON_HEADERS);
+  const callerHeaders = new Headers(options.headers);
+
+  callerHeaders.forEach((value: string, key: string) => {
+    headers.set(key, value);
+  });
+
+  headers.delete("cookie");
 
   if (cookie) {
-    headers.Cookie = cookie;
+    headers.set("cookie", cookie);
   }
 
   const response = await fetch(apiUrl(path), {
@@ -50,24 +54,6 @@ function apiUrl(path: string): string {
   }
 
   return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
-}
-
-function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
-  if (!headers) return {};
-
-  if (Array.isArray(headers)) {
-    return Object.fromEntries(headers);
-  }
-
-  if (typeof Headers !== "undefined" && headers instanceof Headers) {
-    const result: Record<string, string> = {};
-    headers.forEach((value: string, key: string) => {
-      result[key] = value;
-    });
-    return result;
-  }
-
-  return headers as Record<string, string>;
 }
 
 async function readError(response: Response): Promise<ApiErrorResponse> {

@@ -9,7 +9,7 @@ if (!apiUrl) {
 }
 
 export const authClient = createAuthClient({
-  baseURL: apiUrl.replace(/\/+$/, ""),
+  baseURL: `${apiUrl.replace(/\/+$/, "")}/auth`,
   plugins: [
     expoClient({
       scheme: "biteiq",

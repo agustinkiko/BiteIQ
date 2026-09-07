@@ -2,13 +2,16 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { Text } from "react-native";
 
 import { AuthGate, AuthGateSessionState } from "@/auth/AuthGate";
+import { authClient } from "@/auth/authClient";
 import { LoginScreen } from "@/screens/LoginScreen";
 
-jest.mock("@/auth/authClient", () => ({
-  authClient: {
-    useSession: jest.fn(),
-    signIn: { email: jest.fn() }
-  }
+jest.mock("expo-secure-store", () => ({
+  getItem: jest.fn(() => null),
+  setItem: jest.fn()
+}));
+
+jest.mock("expo-linking", () => ({
+  createURL: jest.fn(() => "biteiq://")
 }));
 
 const signedOut: AuthGateSessionState = { data: null, isPending: false };
@@ -107,5 +110,26 @@ describe("LoginScreen", () => {
     await act(async () => {
       finish({ error: null });
     });
+  });
+});
+
+describe("authClient", () => {
+  it("sends real email login requests to the server auth route", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message: "invalid credentials" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    global.fetch = fetchMock as typeof fetch;
+
+    await authClient.signIn.email({
+      email: "user@example.com",
+      password: "not-the-password"
+    });
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "https://biteiq.test/api/auth/sign-in/email"
+    );
   });
 });
