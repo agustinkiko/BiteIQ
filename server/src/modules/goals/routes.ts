@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { ZodError, type ZodType } from "zod";
 
 import { requireUser } from "../../auth/guard.js";
@@ -12,6 +12,7 @@ import {
   profileInputSchema,
   profilePatchSchema,
   type GoalCalculationInput,
+  type GoalWarning,
   type ProfileInput,
 } from "./contracts.js";
 import { createGoalsRepository } from "./repository.js";
@@ -36,28 +37,37 @@ export const goalsRoutes: FastifyPluginAsync<GoalsRoutesOptions> = async (
     return { profile: await repository.getProfile(user.id) };
   });
 
-  app.patch("/api/me", async (request) => {
+  app.patch("/api/me", async (request, reply) => {
     const user = await getUser(request);
-    const patch = parse(profilePatchSchema, request.body);
+    const parsedPatch = parse(profilePatchSchema, request.body);
+    const { confirmedWarnings, ...patch } = parsedPatch;
     const existing = await repository.getProfile(user.id);
     const profile = parse(
       profileInputSchema,
-      existing ? { ...profileAsInput(existing), ...patch } : request.body,
+      existing ? { ...profileAsInput(existing), ...patch } : patch,
     );
+    const calculationDate = now();
+    assertDateOfBirthIsNotFuture(profile, calculationDate);
 
-    const savedProfile = await repository.upsertProfile(user.id, profile);
-    const existingGoal = await repository.getGoal(user.id);
-    if (existingGoal) {
-      const goalInput = storedGoalAsInput(existingGoal);
-      const calculated = calculateForRoute(
-        calculationInput(savedProfile, goalInput, now()),
-      );
-      await repository.upsertGoal(
+    let savedProfile;
+    try {
+      savedProfile = await repository.upsertProfileAndRecalculateGoal(
         user.id,
-        goalInput,
-        calculated,
-        savedProfile.dateOfBirth,
+        profile,
+        (transactionProfile, existingGoal) => {
+          const input = storedGoalAsInput(existingGoal);
+          const calculated = calculateForRoute(
+            calculationInput(transactionProfile, input, calculationDate),
+          );
+          assertWarningsConfirmed(calculated.warnings, confirmedWarnings);
+          return { input, calculated };
+        },
       );
+    } catch (error) {
+      if (error instanceof UnconfirmedGoalWarningsError) {
+        return sendUnconfirmedWarnings(reply, error);
+      }
+      throw error;
     }
 
     return { profile: savedProfile };
@@ -79,7 +89,7 @@ export const goalsRoutes: FastifyPluginAsync<GoalsRoutesOptions> = async (
     return { calculation };
   });
 
-  app.put("/api/goals", async (request) => {
+  app.put("/api/goals", async (request, reply) => {
     const user = await getUser(request);
     const parsed = parse(goalPutSchema, request.body);
     const { confirmedWarnings, ...unvalidatedInput } = parsed;
@@ -88,15 +98,13 @@ export const goalsRoutes: FastifyPluginAsync<GoalsRoutesOptions> = async (
     const calculated = calculateForRoute(
       calculationInput(profile, input, now()),
     );
-    const missingWarnings = calculated.warnings.filter(
-      (warning) => !confirmedWarnings.includes(warning),
-    );
-    if (missingWarnings.length > 0) {
-      throw new ApiError(
-        400,
-        ErrorCode.INVALID_INPUT,
-        `Confirm these warnings before saving: ${missingWarnings.join(", ")}.`,
-      );
+    try {
+      assertWarningsConfirmed(calculated.warnings, confirmedWarnings);
+    } catch (error) {
+      if (error instanceof UnconfirmedGoalWarningsError) {
+        return sendUnconfirmedWarnings(reply, error);
+      }
+      throw error;
     }
 
     const goal = await repository.upsertGoal(
@@ -131,6 +139,59 @@ function calculateForRoute(input: GoalCalculationInput) {
       throw new ApiError(400, ErrorCode.INVALID_INPUT, error.message);
     }
     throw error;
+  }
+}
+
+function assertWarningsConfirmed(
+  warnings: GoalWarning[],
+  confirmedWarnings: GoalWarning[],
+): void {
+  const missingWarnings = warnings.filter(
+    (warning) => !confirmedWarnings.includes(warning),
+  );
+  if (missingWarnings.length > 0) {
+    throw new UnconfirmedGoalWarningsError(missingWarnings);
+  }
+}
+
+class UnconfirmedGoalWarningsError extends Error {
+  public constructor(public readonly warnings: GoalWarning[]) {
+    super(`Confirm these warnings before saving: ${warnings.join(", ")}.`);
+    this.name = "UnconfirmedGoalWarningsError";
+  }
+}
+
+function sendUnconfirmedWarnings(
+  reply: FastifyReply,
+  error: UnconfirmedGoalWarningsError,
+) {
+  return reply.status(400).send({
+    error: {
+      code: ErrorCode.INVALID_INPUT,
+      message: error.message,
+      warnings: error.warnings,
+    },
+  });
+}
+
+function assertDateOfBirthIsNotFuture(
+  profile: ProfileInput,
+  calculationDate: Date,
+): void {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: profile.timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(calculationDate);
+  const local = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const localDate = `${local.year}-${local.month}-${local.day}`;
+  if (profile.dateOfBirth > localDate) {
+    throw new ApiError(
+      400,
+      ErrorCode.INVALID_INPUT,
+      "dateOfBirth: Date of birth cannot be in the future.",
+    );
   }
 }
 

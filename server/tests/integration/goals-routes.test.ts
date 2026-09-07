@@ -211,7 +211,13 @@ describe("goal route plugin", () => {
     });
 
     expect(rejected.statusCode).toBe(400);
-    expect(rejected.json()).toMatchObject({ error: { code: "INVALID_INPUT" } });
+    expect(rejected.json()).toEqual({
+      error: {
+        code: "INVALID_INPUT",
+        message: "Confirm these warnings before saving: LOW_CALORIE_TARGET.",
+        warnings: ["LOW_CALORIE_TARGET"],
+      },
+    });
     expect(accepted.statusCode).toBe(200);
     expect(accepted.json()).toMatchObject({
       goal: {
@@ -241,6 +247,106 @@ describe("goal route plugin", () => {
         isManualCalorieTarget: true,
       },
     });
+  });
+
+  it("requires warning confirmation before an automatic goal becomes unsafe after a profile change", async () => {
+    await requestAsUserA("PATCH", "/api/me", profileA);
+    await requestAsUserA("PUT", "/api/goals", {
+      ...goalA,
+      confirmedWarnings: [],
+    });
+
+    const rejected = await requestAsUserA("PATCH", "/api/me", {
+      heightCm: 50,
+    });
+    const afterRejection = await loadProfileAndGoal(pool, userAId);
+    const accepted = await requestAsUserA("PATCH", "/api/me", {
+      heightCm: 50,
+      confirmedWarnings: ["LOW_CALORIE_TARGET"],
+    });
+    const afterConfirmation = await loadProfileAndGoal(pool, userAId);
+
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json()).toEqual({
+      error: {
+        code: "INVALID_INPUT",
+        message: "Confirm these warnings before saving: LOW_CALORIE_TARGET.",
+        warnings: ["LOW_CALORIE_TARGET"],
+      },
+    });
+    expect(afterRejection).toMatchObject({
+      biological_sex: "male",
+      height_cm: "180.00",
+      calorie_target_kcal: "2136.000",
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(afterConfirmation).toMatchObject({
+      height_cm: "50.00",
+      calorie_target_kcal: "1161.000",
+    });
+  });
+
+  it("requires EXTREME_RATE confirmation when a profile change recalculates that goal", async () => {
+    await requestAsUserA("PATCH", "/api/me", profileA);
+    await requestAsUserA("PUT", "/api/goals", {
+      ...goalA,
+      goalType: "gain",
+      weeklyRateKg: 1.1,
+      confirmedWarnings: ["EXTREME_RATE"],
+    });
+
+    const response = await requestAsUserA("PATCH", "/api/me", {
+      heightCm: 170,
+    });
+    const persisted = await loadProfileAndGoal(pool, userAId);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: {
+        code: "INVALID_INPUT",
+        message: "Confirm these warnings before saving: EXTREME_RATE.",
+        warnings: ["EXTREME_RATE"],
+      },
+    });
+    expect(persisted?.height_cm).toBe("180.00");
+  });
+
+  it("rolls back the profile when its automatic goal cannot be recalculated", async () => {
+    await requestAsUserA("PATCH", "/api/me", profileA);
+    await requestAsUserA("PUT", "/api/goals", {
+      ...goalA,
+      confirmedWarnings: [],
+    });
+
+    const response = await requestAsUserA("PATCH", "/api/me", {
+      biologicalSex: "unspecified",
+    });
+    const persisted = await loadProfileAndGoal(pool, userAId);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: "INVALID_INPUT" } });
+    expect(persisted).toMatchObject({
+      biological_sex: "male",
+      height_cm: "180.00",
+      bmr_kcal: "1780.000",
+      calorie_target_kcal: "2136.000",
+    });
+  });
+
+  it("rejects a future date of birth before creating a profile", async () => {
+    const response = await requestAsUserA("PATCH", "/api/me", {
+      ...profileA,
+      dateOfBirth: "2026-09-08",
+      timezone: "America/Los_Angeles",
+    });
+    const persisted = await pool.query(
+      "SELECT user_id FROM user_profiles WHERE user_id = $1",
+      [userAId],
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: "INVALID_INPUT" } });
+    expect(persisted.rows).toHaveLength(0);
   });
 
   it("rejects invalid profile and goal fields instead of ignoring them", async () => {
@@ -326,4 +432,20 @@ async function insertGoal(pool: Pool, userId: string): Promise<void> {
              1900, 100, 200, 50, 'grams', true)`,
     [userId],
   );
+}
+
+async function loadProfileAndGoal(pool: Pool, userId: string) {
+  const result = await pool.query<{
+    biological_sex: string;
+    height_cm: string;
+    bmr_kcal: string;
+    calorie_target_kcal: string;
+  }>(
+    `SELECT p.biological_sex, p.height_cm, g.bmr_kcal, g.calorie_target_kcal
+     FROM user_profiles p
+     JOIN user_goals g ON g.user_id = p.user_id
+     WHERE p.user_id = $1`,
+    [userId],
+  );
+  return result.rows[0];
 }

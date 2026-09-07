@@ -56,10 +56,15 @@ export const profileInputSchema = z
   })
   .strict();
 
-export const profilePatchSchema = profileInputSchema.partial().refine(
-  (value) => Object.keys(value).length > 0,
-  { message: "At least one profile field is required." },
-);
+export const profilePatchSchema = profileInputSchema
+  .partial()
+  .extend({
+    confirmedWarnings: z.array(goalWarningSchema).default([]),
+  })
+  .refine(
+    (value) => Object.keys(value).some((key) => key !== "confirmedWarnings"),
+    { message: "At least one profile field is required." },
+  );
 
 const macroTargetsSchema = z
   .object({
