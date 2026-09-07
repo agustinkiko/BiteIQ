@@ -5,6 +5,6 @@ metadata:
 data:
   NODE_ENV: production
   PORT: "3000"
-  APP_URL: ""
-  CLIENT_ORIGINS: ""
+  APP_URL: https://biteiq.home.arpa
+  CLIENT_ORIGINS: https://biteiq.home.arpa
   OPENFOODFACTS_USER_AGENT: BiteIQ/1.0 (private nutrition tracker)
