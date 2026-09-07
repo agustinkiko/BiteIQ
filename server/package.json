@@ -14,8 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:prod": "node dist/db/migrate.js",
-    "account:create": "tsx src/scripts/create-account.ts",
-    "account:reset-password": "tsx src/scripts/reset-password.ts"
+    "account:create": "tsx src/scripts/account-create.ts",
+    "account:reset-password": "tsx src/scripts/account-reset-password.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.3",
