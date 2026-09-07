@@ -1,3 +1,5 @@
+import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import Fastify, {
   LogController,
   type FastifyInstance,
@@ -22,6 +24,7 @@ export type BuildAppOptions = {
   db?: BiteIqDatabase;
   nutritionProviders?: NutritionProviderRegistry;
   checkDatabaseHealth?: () => Promise<void>;
+  clientOrigins?: string[];
 };
 
 const bodyLimit = 64 * 1024;
@@ -58,6 +61,24 @@ export async function buildApp(
   });
 
   registerErrorHandler(app);
+
+  await app.register(cors, {
+    origin: options.clientOrigins ?? [],
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  });
+  await app.register(rateLimit, {
+    global: true,
+    max: (request) => isPasswordAuthAttempt(request) ? 10 : 60,
+    timeWindow: "1 minute",
+    allowList: (request) => !isRateLimitedRequest(request),
+    keyGenerator: (request) => `${rateLimitGroup(request)}:${request.ip}`,
+    errorResponseBuilder: () => new ApiError(
+      429,
+      ErrorCode.RATE_LIMITED,
+      "Too many requests. Try again shortly.",
+    ),
+  });
 
   app.get("/api/health/live", async () => ({ status: "ok" }));
   app.get("/api/health/ready", async () => {
@@ -219,4 +240,29 @@ function isPublicRequest(request: FastifyRequest): boolean {
   return path === "/api/health/live"
     || path === "/api/health/ready"
     || path?.startsWith("/api/auth/") === true;
+}
+
+function isRateLimitedRequest(request: FastifyRequest): boolean {
+  return isPasswordAuthAttempt(request) || isFoodSearch(request);
+}
+
+function isPasswordAuthAttempt(request: FastifyRequest): boolean {
+  const path = request.url.split("?", 1)[0] ?? "";
+  return [
+    "/api/auth/sign-in",
+    "/api/auth/sign-up",
+    "/api/auth/change-password",
+    "/api/auth/change-email",
+    "/api/auth/request-password-reset",
+    "/api/auth/forget-password",
+    "/api/auth/reset-password",
+  ].some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+}
+
+function isFoodSearch(request: FastifyRequest): boolean {
+  return request.url.split("?", 1)[0] === "/api/foods/search";
+}
+
+function rateLimitGroup(request: FastifyRequest): string {
+  return isPasswordAuthAttempt(request) ? "auth" : "food-search";
 }

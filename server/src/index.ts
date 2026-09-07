@@ -53,6 +53,7 @@ export async function startServer(
     app = await dependencies.buildApp({
       auth,
       db,
+      clientOrigins: config.clientOrigins,
       nutritionProviders,
       checkDatabaseHealth: async () => {
         await db.execute(sql`select 1`);

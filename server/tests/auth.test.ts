@@ -268,6 +268,7 @@ describe("server composition", () => {
       {
         db,
         auth,
+        clientOrigins: config.clientOrigins,
         nutritionProviders,
         checkDatabaseHealth: expect.any(Function),
       },
