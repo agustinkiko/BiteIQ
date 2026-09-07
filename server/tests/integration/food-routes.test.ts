@@ -191,6 +191,40 @@ describe("food route plugin", () => {
     await app.close();
   });
 
+  it.each([
+    {
+      label: "timeout",
+      providerError: "NUTRITION_PROVIDER_TIMEOUT: private socket detail",
+    },
+    {
+      label: "server failure",
+      providerError: "NUTRITION_PROVIDER_UNAVAILABLE: private upstream detail",
+    },
+  ])(
+    "returns an empty successful search plus a safe warning after a USDA $label",
+    async ({ providerError }) => {
+      const app = await buildFoodApp(
+        registry(providerReturning([], new Error(providerError))),
+      );
+
+      const response = await search(app, "lentils", 2);
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        foods: [],
+        warnings: [
+          {
+            code: "NUTRITION_PROVIDER_UNAVAILABLE",
+            provider: "usda",
+            message: "The nutrition database is unavailable. Try again.",
+          },
+        ],
+      });
+      expect(response.body).not.toContain("private");
+      await app.close();
+    },
+  );
+
   it("returns FOOD_NOT_FOUND for missing and disabled canonical foods", async () => {
     const food = await repository.upsertProviderFood(providerFood());
     const app = await buildFoodApp(registry());

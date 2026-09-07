@@ -64,13 +64,6 @@ export const foodRoutes: FastifyPluginAsync<FoodRoutesOptions> = async (
             { err: error, provider: provider.id },
             "nutrition provider search failed",
           );
-          if (localFoods.length === 0) {
-            throw new ApiError(
-              503,
-              ErrorCode.NUTRITION_PROVIDER_UNAVAILABLE,
-              "The nutrition database is unavailable. Try again.",
-            );
-          }
           warnings.push(providerWarning(provider.id));
           return { foods: localFoods, warnings };
         }
