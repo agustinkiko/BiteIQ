@@ -36,7 +36,8 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
     throw new ApiError(
       payload.code ?? "API_ERROR",
       response.status,
-      payload.message ?? "BiteIQ could not complete this request."
+      payload.message ?? "BiteIQ could not complete this request.",
+      payload.warnings
     );
   }
 
@@ -59,9 +60,13 @@ function apiUrl(path: string): string {
 async function readError(response: Response): Promise<ApiErrorResponse> {
   try {
     const payload = (await response.json()) as ApiErrorResponse;
+    const detail = payload.error ?? payload;
     return {
-      code: isApiErrorCode(payload.code) ? payload.code : "API_ERROR",
-      message: typeof payload.message === "string" ? payload.message : undefined
+      code: isApiErrorCode(detail.code) ? detail.code : "API_ERROR",
+      message: typeof detail.message === "string" ? detail.message : undefined,
+      warnings: Array.isArray(detail.warnings)
+        ? detail.warnings.filter((warning): warning is string => typeof warning === "string")
+        : []
     };
   } catch {
     return { code: "API_ERROR" };

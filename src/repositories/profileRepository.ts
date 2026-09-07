@@ -1,4 +1,5 @@
 import { apiRequest } from "@/api/client";
+import { ApiError } from "@/api/contracts";
 import {
   CalculatedGoal,
   GoalInput,
@@ -20,19 +21,36 @@ export class GoalConfirmationRequiredError extends Error {
   }
 }
 
+export class ProfileConfirmationRequiredError extends Error {
+  constructor(public readonly warnings: GoalWarning[]) {
+    super("Review and confirm the profile safety warnings before saving.");
+    this.name = "ProfileConfirmationRequiredError";
+  }
+}
+
 export const profileRepository = {
   async get(): Promise<UserProfile | null> {
     const response = await apiRequest<ProfileResponse>("/me");
     return response.profile;
   },
 
-  async update(profile: Partial<ProfileInput>): Promise<UserProfile> {
-    const response = await apiRequest<ProfileResponse>("/me", {
-      method: "PATCH",
-      body: JSON.stringify(profilePayload(profile))
-    });
-    if (!response.profile) throw new Error("The saved profile was not returned.");
-    return response.profile;
+  async update(
+    profile: Partial<ProfileInput>,
+    confirmedWarnings: GoalWarning[] = []
+  ): Promise<UserProfile> {
+    try {
+      const response = await apiRequest<ProfileResponse>("/me", {
+        method: "PATCH",
+        body: JSON.stringify({ ...profilePayload(profile), confirmedWarnings })
+      });
+      if (!response.profile) throw new Error("The saved profile was not returned.");
+      return response.profile;
+    } catch (error) {
+      if (error instanceof ApiError && error.warnings.length > 0) {
+        throw new ProfileConfirmationRequiredError(goalWarnings(error.warnings));
+      }
+      throw error;
+    }
   },
 
   async getGoal(): Promise<StoredGoal | null> {
@@ -105,4 +123,11 @@ function goalPayload(goal: GoalInput): GoalInput {
       ? {}
       : { manualCalorieTargetKcal: goal.manualCalorieTargetKcal })
   };
+}
+
+function goalWarnings(warnings: string[]): GoalWarning[] {
+  return warnings.filter(
+    (warning): warning is GoalWarning =>
+      warning === "EXTREME_RATE" || warning === "LOW_CALORIE_TARGET"
+  );
 }

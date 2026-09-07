@@ -11,7 +11,8 @@ export class ApiError extends Error {
   constructor(
     public readonly code: ApiErrorCode,
     public readonly status: number,
-    message: string
+    message: string,
+    public readonly warnings: string[] = []
   ) {
     super(message);
     this.name = "ApiError";
@@ -21,4 +22,10 @@ export class ApiError extends Error {
 export type ApiErrorResponse = {
   code?: ApiErrorCode;
   message?: string;
+  warnings?: string[];
+  error?: {
+    code?: ApiErrorCode;
+    message?: string;
+    warnings?: string[];
+  };
 };

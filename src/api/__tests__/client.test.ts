@@ -90,7 +90,8 @@ describe("apiRequest", () => {
       name: "ApiError",
       code: "AUTH_REQUIRED",
       status: 401,
-      message: "Sign in to continue."
+      message: "Sign in to continue.",
+      warnings: []
     });
   });
 
@@ -113,5 +114,25 @@ describe("apiRequest", () => {
     log.mockRestore();
     warn.mockRestore();
     error.mockRestore();
+  });
+
+  it("preserves structured warning codes from a nested server error", async () => {
+    fetchMock.mockResolvedValue(
+      response(400, {
+        error: {
+          code: "INVALID_INPUT",
+          message: "Confirm these warnings before saving: LOW_CALORIE_TARGET.",
+          warnings: ["LOW_CALORIE_TARGET"]
+        }
+      })
+    );
+
+    await expect(apiRequest("/me", { method: "PATCH", body: "{}" })).rejects.toMatchObject({
+      name: "ApiError",
+      code: "INVALID_INPUT",
+      status: 400,
+      message: "Confirm these warnings before saving: LOW_CALORIE_TARGET.",
+      warnings: ["LOW_CALORIE_TARGET"]
+    });
   });
 });

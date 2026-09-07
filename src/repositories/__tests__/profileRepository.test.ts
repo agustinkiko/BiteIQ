@@ -113,8 +113,36 @@ describe("profileRepository", () => {
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toBe("https://biteiq.test/api/me");
     expect(options?.method).toBe("PATCH");
-    expect(JSON.parse(String(options?.body))).toEqual(profile);
+    expect(JSON.parse(String(options?.body))).toEqual({ ...profile, confirmedWarnings: [] });
     expect(JSON.parse(String(options?.body))).not.toHaveProperty("userId");
+  });
+
+  it("retries a profile update only after the returned warnings are confirmed", async () => {
+    fetchMock.mockResolvedValueOnce(
+      response(400, {
+        error: {
+          code: "INVALID_INPUT",
+          message: "Confirm these warnings before saving: LOW_CALORIE_TARGET.",
+          warnings: ["LOW_CALORIE_TARGET"]
+        }
+      })
+    );
+
+    await expect(profileRepository.update({ heightCm: 50 })).rejects.toMatchObject({
+      name: "ProfileConfirmationRequiredError",
+      warnings: ["LOW_CALORIE_TARGET"]
+    });
+
+    fetchMock.mockResolvedValueOnce(response(200, { profile: { ...profile, heightCm: 50 } }));
+    await profileRepository.update(
+      { heightCm: 50, userId: "injected-user-id" } as never,
+      ["LOW_CALORIE_TARGET"]
+    );
+
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      heightCm: 50,
+      confirmedWarnings: ["LOW_CALORIE_TARGET"]
+    });
   });
 
   it("calculates a goal from required metric goal fields and no user UUID", async () => {
