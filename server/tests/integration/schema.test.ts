@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
 
+import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { schemaCheckFor } from "@better-auth/core/db/internal";
 import type { Pool } from "pg";
+import { admin } from "better-auth/plugins";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { createDb } from "../../src/db/client.js";
+import * as schema from "../../src/db/schema/index.js";
 import {
   createIntegrationPool,
+  integrationDatabaseUrl,
   truncateIntegrationDatabase,
 } from "./setup.js";
 
@@ -125,6 +131,28 @@ describe("normalized nutrition database constraints", () => {
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0]?.indexdef).toMatch(/USING gin/i);
     expect(result.rows[0]?.indexdef).toMatch(/normalized_name gin_trgm_ops/i);
+  });
+});
+
+describe("Better Auth schema compatibility", () => {
+  it("matches the admin plugin Drizzle schema", async () => {
+    const db = createDb(integrationDatabaseUrl);
+
+    try {
+      const adapter = drizzleAdapter(db, {
+        provider: "pg",
+        schema,
+      })({
+        plugins: [admin()],
+        advanced: { database: { generateId: "uuid" } },
+      });
+      const checkSchema = schemaCheckFor(adapter);
+
+      expect(checkSchema).toBeTypeOf("function");
+      await expect(checkSchema?.()).resolves.toBeUndefined();
+    } finally {
+      await db.$client.end();
+    }
   });
 });
 

@@ -8,6 +8,13 @@
       "when": 1788799051502,
       "tag": "0000_natural_black_tom",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788800156165,
+      "tag": "0001_lean_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }
