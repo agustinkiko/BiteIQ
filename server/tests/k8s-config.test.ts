@@ -11,6 +11,13 @@ function readBaseConfig(): string {
   );
 }
 
+function readOperationsGuide(): string {
+  return readFileSync(
+    new URL("../../docs/OPERATIONS.md", import.meta.url),
+    "utf8",
+  );
+}
+
 function configValue(configMap: string, key: string): string {
   const match = configMap.match(new RegExp(`^  ${key}: ["']?([^"'\\n]+)["']?$`, "m"));
 
@@ -36,5 +43,19 @@ describe("K3s base configuration", () => {
       APP_URL: appUrl,
       CLIENT_ORIGINS: clientOrigins,
     })).not.toThrow();
+  });
+
+  test("restore verification commands fail when required tables are missing", () => {
+    const operationsGuide = readOperationsGuide();
+    const verificationCommands = operationsGuide
+      .split("\n")
+      .filter((line) => line.includes("-- psql") && line.includes("to_regclass"));
+
+    expect(verificationCommands).toHaveLength(3);
+    for (const command of verificationCommands) {
+      expect(command).toContain("DO \\$verify\\$");
+      expect(command.match(/ IS NULL/g)).toHaveLength(3);
+      expect(command).toContain("RAISE EXCEPTION");
+    }
   });
 });

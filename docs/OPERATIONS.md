@@ -97,7 +97,7 @@ shasum -a 256 -c "$CHECKSUM_PATH"
 kubectl -n "$NAMESPACE" cp "$BACKUP_PATH" "$VALIDATION_POD:/tmp/biteiq.dump"
 kubectl -n "$NAMESPACE" exec "$VALIDATION_POD" -- createdb -U "$POSTGRES_USER" "$VALIDATION_DATABASE"
 kubectl -n "$NAMESPACE" exec "$VALIDATION_POD" -- pg_restore -U "$POSTGRES_USER" -d "$VALIDATION_DATABASE" --exit-on-error --single-transaction /tmp/biteiq.dump
-kubectl -n "$NAMESPACE" exec "$VALIDATION_POD" -- psql -U "$POSTGRES_USER" -d "$VALIDATION_DATABASE" -v ON_ERROR_STOP=1 -Atc "SELECT to_regclass('public.user'), to_regclass('public.foods'), to_regclass('public.food_entries');"
+kubectl -n "$NAMESPACE" exec "$VALIDATION_POD" -- psql -U "$POSTGRES_USER" -d "$VALIDATION_DATABASE" -v ON_ERROR_STOP=1 -Atc "DO \$verify\$ BEGIN IF to_regclass('public.user_profiles') IS NULL OR to_regclass('public.foods') IS NULL OR to_regclass('public.food_entries') IS NULL THEN RAISE EXCEPTION 'BiteIQ restore verification failed: required tables are missing'; END IF; END \$verify\$;"
 )
 ```
 
@@ -124,7 +124,7 @@ shasum -a 256 -c "$PRE_RESTORE_CHECKSUM_PATH"
 shasum -a 256 -c "$CHECKSUM_PATH"
 kubectl -n "$NAMESPACE" cp "$BACKUP_PATH" "$POD:/tmp/biteiq.dump"
 kubectl -n "$NAMESPACE" exec "$POD" -- pg_restore -U "$POSTGRES_USER" -d "$DATABASE" --clean --if-exists --exit-on-error --single-transaction /tmp/biteiq.dump
-kubectl -n "$NAMESPACE" exec "$POD" -- psql -U "$POSTGRES_USER" -d "$DATABASE" -v ON_ERROR_STOP=1 -Atc "SELECT to_regclass('public.user'), to_regclass('public.foods'), to_regclass('public.food_entries');"
+kubectl -n "$NAMESPACE" exec "$POD" -- psql -U "$POSTGRES_USER" -d "$DATABASE" -v ON_ERROR_STOP=1 -Atc "DO \$verify\$ BEGIN IF to_regclass('public.user_profiles') IS NULL OR to_regclass('public.foods') IS NULL OR to_regclass('public.food_entries') IS NULL THEN RAISE EXCEPTION 'BiteIQ restore verification failed: required tables are missing'; END IF; END \$verify\$;"
 )
 ```
 
@@ -154,7 +154,7 @@ PRE_RESTORE_CHECKSUM_PATH="${PRE_RESTORE_BACKUP_PATH}.sha256"
 shasum -a 256 -c "$PRE_RESTORE_CHECKSUM_PATH"
 kubectl -n "$NAMESPACE" cp "$PRE_RESTORE_BACKUP_PATH" "$POD:/tmp/biteiq-pre-restore.dump"
 kubectl -n "$NAMESPACE" exec "$POD" -- pg_restore -U "$POSTGRES_USER" -d "$DATABASE" --clean --if-exists --exit-on-error --single-transaction /tmp/biteiq-pre-restore.dump
-kubectl -n "$NAMESPACE" exec "$POD" -- psql -U "$POSTGRES_USER" -d "$DATABASE" -v ON_ERROR_STOP=1 -Atc "SELECT to_regclass('public.user'), to_regclass('public.foods'), to_regclass('public.food_entries');"
+kubectl -n "$NAMESPACE" exec "$POD" -- psql -U "$POSTGRES_USER" -d "$DATABASE" -v ON_ERROR_STOP=1 -Atc "DO \$verify\$ BEGIN IF to_regclass('public.user_profiles') IS NULL OR to_regclass('public.foods') IS NULL OR to_regclass('public.food_entries') IS NULL THEN RAISE EXCEPTION 'BiteIQ restore verification failed: required tables are missing'; END IF; END \$verify\$;"
 )
 ```
 
