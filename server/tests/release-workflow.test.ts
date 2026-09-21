@@ -24,6 +24,6 @@ describe("release build contract", () => {
     expect(build.with.context).toBe(".");
     expect(build.with.push).toBe(true);
     expect(build.with.tags).toBe("ghcr.io/agustinkiko/biteiq-${{ matrix.name }}:main-${{ github.sha }}-${{ github.run_number }}");
-    expect(build.with["build-args"]).toBe("EXPO_PUBLIC_API_URL=https://biteiq.home.arpa/api");
+    expect(build.with["build-args"]).toBe("EXPO_PUBLIC_API_URL=https://biteiq.jericoagustin.com/api");
   });
 });

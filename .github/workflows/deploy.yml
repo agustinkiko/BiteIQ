@@ -35,6 +35,6 @@ jobs:
           platforms: linux/amd64
           push: true
           provenance: false
-          build-args: EXPO_PUBLIC_API_URL=https://biteiq.home.arpa/api
+          build-args: EXPO_PUBLIC_API_URL=https://biteiq.jericoagustin.com/api
           labels: org.opencontainers.image.source=https://github.com/agustinkiko/BiteIQ
           tags: ghcr.io/agustinkiko/biteiq-${{ matrix.name }}:main-${{ github.sha }}-${{ github.run_number }}
