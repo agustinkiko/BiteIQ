@@ -38,6 +38,12 @@ function providerError(code: string): Error {
   return new Error(code);
 }
 
+class MissingEnergyError extends Error {
+  constructor() {
+    super("INVALID_NUTRITION_PROVIDER_PAYLOAD");
+  }
+}
+
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -110,7 +116,7 @@ function nutrientIdentity(record: JsonRecord): {
   const numericId = typeof rawId === "number" && Number.isInteger(rawId) ? rawId : null;
   return {
     id: numericId,
-    number: optionalString(record.nutrientNumber ?? nested?.number),
+    number: optionalString(record.nutrientNumber ?? nested?.number ?? record.number),
     unit: optionalString(record.unitName ?? nested?.unitName)?.toLowerCase() ?? null,
     value: record.value ?? record.amount,
   };
@@ -155,7 +161,7 @@ function normalizedNutrition(food: JsonRecord): {
   }
 
   const calories = kcal ?? kilojoules?.div("4.184") ?? null;
-  if (calories === null) throw providerError("INVALID_NUTRITION_PROVIDER_PAYLOAD");
+  if (calories === null) throw new MissingEnergyError();
   return { calories: calories.toFixed(6), nutrients };
 }
 
@@ -199,12 +205,35 @@ function serving(params: {
   };
 }
 
-function normalizedServings(food: JsonRecord, externalId: string): FoodServing[] {
+function portionName(portion: JsonRecord): string {
+  const description = optionalString(portion.portionDescription) ?? optionalString(portion.disseminationText);
+  if (description) return description;
+  const measure = isRecord(portion.measureUnit) ? optionalString(portion.measureUnit.name) : null;
+  const unit = measure && measure.toLowerCase() !== "undetermined" ? measure : null;
+  const modifier = optionalString(portion.modifier);
+  const amount = portion.amount === undefined || portion.amount === null
+    ? "1"
+    : positiveDecimal(portion.amount).toString();
+  if (unit) return `${amount} ${unit}${modifier ? `, ${modifier}` : ""}`;
+  return `${amount} ${modifier ?? "portion"}`;
+}
+
+function nutritionBasisUnit(food: JsonRecord): "g" | "ml" {
+  // USDA branded values are per 100 of the declared metric unit. A liquid
+  // serving does not establish density and must never be treated as grams.
+  if (requiredString(food.dataType).toLowerCase() === "branded") {
+    const unit = optionalString(food.servingSizeUnit)?.toLowerCase();
+    if (unit === "ml" || unit === "mlt") return "ml";
+  }
+  return "g";
+}
+
+function normalizedServings(food: JsonRecord, externalId: string, basisUnit: "g" | "ml"): FoodServing[] {
   const result: FoodServing[] = [];
 
   if (food.servingSize !== undefined && food.servingSize !== null) {
     const unit = requiredString(food.servingSizeUnit).toLocaleLowerCase();
-    if (unit !== "g" && unit !== "grm") {
+    if (!["g", "grm", "ml", "mlt"].includes(unit)) {
       throw providerError("INVALID_NUTRITION_PROVIDER_PAYLOAD");
     }
     result.push(
@@ -212,7 +241,9 @@ function normalizedServings(food: JsonRecord, externalId: string): FoodServing[]
         externalId,
         suffix: "label-serving",
         name: optionalString(food.householdServingFullText) ?? "1 serving",
-        gramWeight: food.servingSize,
+        ...(unit === "ml" || unit === "mlt"
+          ? { milliliterVolume: food.servingSize }
+          : { gramWeight: food.servingSize }),
       }),
     );
   }
@@ -224,11 +255,7 @@ function normalizedServings(food: JsonRecord, externalId: string): FoodServing[]
       const rawId = portion.id;
       const suffix =
         typeof rawId === "number" || typeof rawId === "string" ? String(rawId) : `measure-${index}`;
-      const name =
-        optionalString(portion.portionDescription) ??
-        optionalString(portion.disseminationText) ??
-        optionalString(portion.modifier) ??
-        "1 portion";
+      const name = portionName(portion);
       result.push(
         serving({
           externalId,
@@ -240,16 +267,16 @@ function normalizedServings(food: JsonRecord, externalId: string): FoodServing[]
     });
   }
 
-  if (result.length === 0) {
-    result.push(
-      serving({
-        externalId,
-        suffix: "100g",
-        name: "100 g",
-        gramWeight: 100,
-      }),
-    );
-  }
+  // Always retain an exact metric option for food-scale measurements, even
+  // when USDA supplies cups, pieces, or manufacturer label servings.
+  result.push(
+    serving({
+      externalId,
+      suffix: `100${basisUnit}`,
+      name: `100 ${basisUnit}`,
+      ...(basisUnit === "ml" ? { milliliterVolume: 100 } : { gramWeight: 100 }),
+    }),
+  );
   result[0] = { ...result[0], isDefault: true };
   return result;
 }
@@ -266,6 +293,7 @@ function normalizeFood(value: unknown): ProviderFood {
   const name = requiredString(food.description);
   const dataType = requiredString(food.dataType);
   const nutrition = normalizedNutrition(food);
+  const basisUnit = nutritionBasisUnit(food);
 
   return {
     provider: "usda",
@@ -285,8 +313,8 @@ function normalizeFood(value: unknown): ProviderFood {
     calories: nutrition.calories,
     nutrients: nutrition.nutrients,
     basisQuantity: "100.0000",
-    basisUnit: "g",
-    servings: normalizedServings(food, externalId),
+    basisUnit,
+    servings: normalizedServings(food, externalId, basisUnit),
   };
 }
 
@@ -346,7 +374,21 @@ export function createUsdaProvider(
     if (!Array.isArray(body.foods)) {
       throw providerError("INVALID_NUTRITION_PROVIDER_PAYLOAD");
     }
-    return body.foods.map(normalizeFood);
+    const foods: ProviderFood[] = [];
+    for (const record of body.foods) {
+      try {
+        foods.push(normalizeFood(record));
+      } catch (error) {
+        // USDA search includes incomplete research records with no energy.
+        // Exclude those records rather than inventing zero calories or losing
+        // the other usable results. Other malformed data still fails closed.
+        if (!(error instanceof MissingEnergyError)) throw error;
+      }
+    }
+    if (body.foods.length > 0 && foods.length === 0) {
+      throw providerError("INVALID_NUTRITION_PROVIDER_PAYLOAD");
+    }
+    return foods;
   }
 
   return {
@@ -380,7 +422,23 @@ export function createUsdaProvider(
         throw providerError("INVALID_FOOD_EXTERNAL_ID");
       }
       const response = await requestJson(`/food/${encodeURIComponent(externalId)}`);
-      return response.found ? normalizeFood(response.body) : null;
+      if (!response.found) return null;
+      const food = requiredRecord(response.body);
+      if (foodId(food) !== externalId) throw providerError("INVALID_NUTRITION_PROVIDER_PAYLOAD");
+      const records = nutrientRecords(food);
+      // Some USDA branded full responses contain food-nutrient row IDs and
+      // amounts but omit the nutrient identities. Abridged data retains the
+      // nutrient numbers; only use it for the same FDC record.
+      if (records.length > 0 && records.every((record) => {
+        const identity = nutrientIdentity(record);
+        return identity.id === null && identity.number === null;
+      })) {
+        const abridgedResponse = await requestJson(`/food/${encodeURIComponent(externalId)}?format=abridged`);
+        const abridged = requiredRecord(abridgedResponse.body);
+        if (foodId(abridged) !== externalId) throw providerError("INVALID_NUTRITION_PROVIDER_PAYLOAD");
+        return normalizeFood({ ...food, foodNutrients: nutrientRecords(abridged) });
+      }
+      return normalizeFood(food);
     },
     async lookupBarcode() {
       return null;

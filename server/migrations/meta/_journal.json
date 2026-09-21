@@ -15,6 +15,13 @@
       "when": 1788800156165,
       "tag": "0001_lean_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789756400000,
+      "tag": "0002_allow_generic_food_type",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,9 @@ images:
   - name: ghcr.io/example/biteiq-api
     newName: ghcr.io/example/biteiq-api
     newTag: latest
+  - name: ghcr.io/example/biteiq-web
+    newName: ghcr.io/example/biteiq-web
+    newTag: latest
 patches:
   - target:
       kind: Ingress

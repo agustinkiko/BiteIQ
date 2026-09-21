@@ -1,14 +1,16 @@
 import { authClient } from "@/auth/authClient";
 import { ApiError, ApiErrorCode, ApiErrorResponse } from "@/api/contracts";
+import { Platform } from "react-native";
 
 const JSON_HEADERS = {
-  Accept: "application/json",
-  "Content-Type": "application/json"
+  Accept: "application/json"
 };
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const cookie = authClient.getCookie();
+  const cookie = Platform.OS === "web" ? "" : authClient.getCookie();
   const headers = new Headers(JSON_HEADERS);
+  // Fastify rejects an empty DELETE body advertised as application/json.
+  if (options.body != null) headers.set("Content-Type", "application/json");
   const callerHeaders = new Headers(options.headers);
 
   callerHeaders.forEach((value: string, key: string) => {

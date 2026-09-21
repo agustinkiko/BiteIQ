@@ -2,6 +2,21 @@
 
 ## Deploy
 
+The workload set includes a static Expo web frontend, Fastify API, and private
+PostgreSQL. The Ingress routes `/api` to `biteiq-api` and `/` to `biteiq-web`.
+Build `deploy/web.Dockerfile` from the repository root with
+`--build-arg EXPO_PUBLIC_API_URL=https://biteiq.home.arpa/api` (replace the origin
+consistently if using another hostname). The build deliberately disables dotenv
+loading and development previews. Server secrets must never become web build
+arguments. `.dockerignore` excludes local credentials, dependency directories,
+database dumps, and screenshot artifacts.
+
+Set a real immutable web image tag as well as the API/migration image tags in
+the selected overlay. The example image names remain placeholders and are not
+a deployed release. Build images for the target node architecture. Do not
+disable TLS verification if the build environment lacks a trusted network CA;
+use an approved build runner or explicitly supplied trusted CA instead.
+
 The base manifests intentionally omit the Secret resource so applying an
 overlay cannot replace working values with blanks. Before deployment, create a
 real Secret named `biteiq-secrets` in the `biteiq` namespace from

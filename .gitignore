@@ -7,3 +7,14 @@ web-build/
 .DS_Store
 android/
 ios/
+.env.*
+!.env.example
+**/.env.*
+!**/.env.example
+.superpowers/
+dogfood-output/
+.claude/
+*.dump
+*.pem
+*.key
+*auth-state*.json

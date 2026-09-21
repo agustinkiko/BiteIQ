@@ -20,9 +20,9 @@ export function kilogramsFromPounds(pounds: number): number {
 }
 
 export function feetAndInchesFromCentimeters(centimeters: number): { feet: number; inches: number } {
-  const totalInches = centimeters / 2.54;
+  const totalInches = Math.round(centimeters / 2.54);
   const feet = Math.floor(totalInches / 12);
-  return { feet, inches: Math.round(totalInches - feet * 12) };
+  return { feet, inches: totalInches % 12 };
 }
 
 export function poundsFromKilograms(kilograms: number): number {

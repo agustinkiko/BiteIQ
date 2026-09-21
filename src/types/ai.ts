@@ -15,6 +15,11 @@ export type AIProviderContext = {
   providerConfig: ModelProviderConfig;
 };
 
+export type AssistantChatInput = {
+  message: string;
+  context?: AIProviderContext;
+};
+
 export type StructuredAIResult<T> = {
   taskId: string;
   confidence: number;

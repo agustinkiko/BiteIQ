@@ -1,6 +1,7 @@
 import { ModelProvider } from "@/services/ai/providers/types";
 import {
   AssistantAnswer,
+  AssistantChatInput,
   BarcodeInterpretation,
   CaptureInput,
   MealParseResult,
@@ -135,12 +136,17 @@ export class MockModelProvider implements ModelProvider {
     return this.parseNaturalLanguageMeal(input);
   }
 
-  async chat(input: { message: string }): Promise<StructuredAIResult<AssistantAnswer>> {
+  async chat(input: AssistantChatInput): Promise<StructuredAIResult<AssistantAnswer>> {
     await delay(450);
     const message = input.message.toLowerCase();
+    const meals = input.context?.todayMeals.length ?? 0;
+    const calories = input.context?.todayMeals.reduce(
+      (sum, meal) => sum + meal.entries.reduce((entrySum, entry) => entrySum + entry.foodItem.nutrition.calories, 0),
+      0
+    );
     const answer = message.includes("protein")
-      ? "You are at 104g protein so far. A 6 oz chicken breast or tofu bowl would put you close to today's target."
-      : "Based on today's log, aim for a lean protein plus a carb source. I would keep dinner around 600 calories with 45g protein.";
+      ? `You have ${meals} meals logged and about ${Math.round(calories || 0)} calories recorded. A lean protein serving would move you toward today's target.`
+      : `I can use today's ${meals} logged meal${meals === 1 ? "" : "s"} to estimate, draft, and review food before saving. For a new meal, send text or upload a photo.`;
 
     return this.wrap("assistantChatReasoning", 0.84, {
       message: answer,

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createNutritionRegistry } from "../../src/providers/nutrition/registry.js";
 import { createUsdaProvider } from "../../src/providers/nutrition/usda.js";
+import { calculateServingNutrition } from "../../src/modules/foods/nutrition.js";
 
 const apiKey = "test-usda-secret-key";
 const searchFixture = JSON.parse(
@@ -31,6 +32,134 @@ afterEach(() => {
 });
 
 describe("USDA nutrition provider", () => {
+  it("omits a search result with no energy while preserving usable USDA records", async () => {
+    const payload = copyFixture();
+    payload.foods.splice(1, 0, {
+      fdcId: 2759004, dataType: "Foundation", description: "Lunchmeat, chicken breast, sliced",
+      foodNutrients: [{ nutrientId: 1087, nutrientNumber: "301", unitName: "MG", value: 12 }],
+    });
+    const foods = await createUsdaProvider({ apiKey }, fetchReturning(payload))
+      .searchFoods({ query: "chicken breast roasted", limit: 10 });
+    expect(foods.map((food) => food.externalId)).toEqual(["171077", "2346395", "2644829"]);
+  });
+
+  it("reports unusable search data when every result lacks energy, but permits a true empty search", async () => {
+    const provider = createUsdaProvider({ apiKey }, fetchReturning({ foods: [{
+      fdcId: 2759004, dataType: "Foundation", description: "Incomplete food", foodNutrients: [],
+    }] }));
+    await expect(provider.searchFoods({ query: "chicken", limit: 10 }))
+      .rejects.toThrow("INVALID_NUTRITION_PROVIDER_PAYLOAD");
+    await expect(createUsdaProvider({ apiKey }, fetchReturning({ foods: [] }))
+      .searchFoods({ query: "no match", limit: 10 })).resolves.toEqual([]);
+  });
+
+  it("always offers the exact metric basis alongside household servings", async () => {
+    const mass = await createUsdaProvider({ apiKey }, fetchReturning(detailFixture)).getFood("171077");
+    const grams = mass?.servings.find((s) => s.name === "100 g");
+    expect(grams).toEqual(expect.objectContaining({ gramWeight: "100.0000", milliliterVolume: null }));
+    expect(calculateServingNutrition(mass!, grams!, "1.5").calories).toBe("247.500000");
+    expect(calculateServingNutrition(mass!, grams!, "2.25").consumedGrams).toBe("225.0000");
+
+    const volume = await createUsdaProvider({ apiKey }, fetchReturning({
+      ...detailFixture, dataType: "Branded", servingSize: 236, servingSizeUnit: "ml", foodPortions: [],
+    })).getFood("171077");
+    const milliliters = volume?.servings.find((s) => s.name === "100 ml");
+    expect(milliliters).toEqual(expect.objectContaining({ gramWeight: null, milliliterVolume: "100.0000" }));
+    expect(calculateServingNutrition(volume!, milliliters!, "1.5").consumedMilliliters).toBe("150.0000");
+    expect(volume?.servings.filter((s) => s.isDefault)).toHaveLength(1);
+  });
+
+  it("recovers USDA full detail with missing nutrient identities from matching abridged data", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ...detailFixture, fdcId: 1909132, dataType: "Branded",
+        servingSize: 236, servingSizeUnit: "ml", householdServingFullText: "1 cup", foodPortions: [],
+        foodNutrients: [{ id: 23933640, amount: 55 }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        fdcId: 1909132,
+        foodNutrients: [
+          { number: "208", name: "Energy", amount: 55, unitName: "KCAL" },
+          { number: "203", name: "Protein", amount: 3.39, unitName: "G" },
+        ],
+      }));
+    const food = await createUsdaProvider({ apiKey }, fetchImpl).getFood("1909132");
+
+    expect(food?.calories).toBe("55.000000");
+    expect(food?.nutrients.protein?.amount).toBe("3.390000");
+    expect(food?.servings[0]?.milliliterVolume).toBe("236.0000");
+    expect(new URL(fetchImpl.mock.calls[1]?.[0]).searchParams.get("format")).toBe("abridged");
+  });
+
+  it("rejects mismatched abridged detail instead of borrowing another food's nutrients", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ ...detailFixture, foodNutrients: [{ id: 99, amount: 55 }] }))
+      .mockResolvedValueOnce(jsonResponse({
+        fdcId: 999, foodNutrients: [{ number: "208", amount: 55, unitName: "KCAL" }],
+      }));
+    await expect(createUsdaProvider({ apiKey }, fetchImpl).getFood("171077"))
+      .rejects.toThrow("INVALID_NUTRITION_PROVIDER_PAYLOAD");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves branded liquid nutrition per 100 ml without assuming gram density", async () => {
+    const payload = copyFixture();
+    payload.foods = [{
+      ...payload.foods[2],
+      servingSize: 240,
+      servingSizeUnit: "mL",
+      householdServingFullText: "1 cup",
+    }];
+    const provider = createUsdaProvider({ apiKey }, fetchReturning(payload));
+
+    const [food] = await provider.searchFoods({ query: "milk", limit: 5 });
+
+    expect(food?.basisUnit).toBe("ml");
+    expect(food?.servings[0]).toEqual(expect.objectContaining({
+      name: "1 cup", gramWeight: null, milliliterVolume: "240.0000",
+    }));
+    const snapshot = calculateServingNutrition(food!, food!.servings[0]!, "1");
+    expect(snapshot.calories).toBe("141.600000");
+    expect(snapshot.consumedGrams).toBeNull();
+    expect(snapshot.consumedMilliliters).toBe("240.0000");
+  });
+
+  it("includes SR Legacy portion amounts and Foundation measure units in serving names", async () => {
+    const payload = {
+      ...detailFixture,
+      foodPortions: [
+        { id: 1, amount: 4, modifier: "oz", gramWeight: 113,
+          measureUnit: { name: "undetermined" } },
+        { id: 2, amount: 1, gramWeight: 4,
+          measureUnit: { name: "teaspoon", abbreviation: "tsp" } },
+        { id: 3, amount: 0.5, modifier: "chopped", gramWeight: 80,
+          measureUnit: { name: "cup" } },
+      ],
+    };
+    const provider = createUsdaProvider({ apiKey }, fetchReturning(payload));
+
+    const food = await provider.getFood("171077");
+
+    expect(food?.servings.map(({ name, gramWeight }) => ({ name, gramWeight }))).toEqual([
+      { name: "4 oz", gramWeight: "113.0000" },
+      { name: "1 teaspoon", gramWeight: "4.0000" },
+      { name: "0.5 cup, chopped", gramWeight: "80.0000" },
+      { name: "100 g", gramWeight: "100.0000" },
+    ]);
+  });
+
+  it("preserves absent nutrients as unknown and refuses to invent missing calories", async () => {
+    const withEnergyOnly = {
+      ...detailFixture,
+      foodNutrients: [{ amount: 120, nutrient: { id: 1008, unitName: "kcal" } }],
+    };
+    const food = await createUsdaProvider({ apiKey }, fetchReturning(withEnergyOnly)).getFood("171077");
+    expect(food?.nutrients).toEqual({});
+    await expect(createUsdaProvider({ apiKey }, fetchReturning({
+      ...detailFixture, foodNutrients: [],
+    })).getFood("171077")).rejects.toThrow("INVALID_NUTRITION_PROVIDER_PAYLOAD");
+  });
+
   it("normalizes Foundation, FNDDS, and Branded search records", async () => {
     const provider = createUsdaProvider({ apiKey }, fetchReturning(searchFixture));
 
@@ -66,6 +195,7 @@ describe("USDA nutrition provider", () => {
         gramWeight: "172.0000",
         milliliterVolume: null,
       }),
+      expect.objectContaining({ name: "100 g", gramWeight: "100.0000" }),
     ]);
     expect(foods[1]).toEqual(
       expect.objectContaining({
@@ -93,6 +223,7 @@ describe("USDA nutrition provider", () => {
         quantity: "1.0000",
         gramWeight: "170.0000",
       }),
+      expect.objectContaining({ name: "100 g", gramWeight: "100.0000" }),
     ]);
     expect(JSON.stringify(foods)).not.toContain(apiKey);
   });
@@ -139,6 +270,7 @@ describe("USDA nutrition provider", () => {
         name: "1 breast",
         gramWeight: "172.0000",
       }),
+      expect.objectContaining({ name: "100 g", gramWeight: "100.0000" }),
     ]);
     expect(new URL(requestedUrls[0] ?? "").pathname).toBe("/fdc/v1/food/171077");
     expect(new URL(requestedUrls[0] ?? "").searchParams.get("api_key")).toBe(apiKey);

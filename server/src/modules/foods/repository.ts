@@ -158,6 +158,14 @@ export function createFoodRepository(db: BiteIqDatabase): FoodRepository {
           });
         }
 
+        const priorServings = await tx
+          .select({ id: foodServings.id, sourceServingId: foodServings.sourceServingId })
+          .from(foodServings)
+          .where(and(eq(foodServings.foodId, id), eq(foodServings.source, providerFood.provider)));
+        const servingIds = new Map(priorServings
+          .filter((serving) => serving.sourceServingId !== null)
+          .map((serving) => [serving.sourceServingId, serving.id]));
+
         await tx
           .delete(foodServings)
           .where(
@@ -169,6 +177,12 @@ export function createFoodRepository(db: BiteIqDatabase): FoodRepository {
         if (providerFood.servings.length > 0) {
           await tx.insert(foodServings).values(
             providerFood.servings.map((serving) => ({
+              // A second user's search may refresh this food while the first
+              // user is choosing a portion. Keep the provider's serving UUID
+              // valid across refreshes; diary nutrition is a separate snapshot.
+              ...(serving.sourceServingId && servingIds.has(serving.sourceServingId)
+                ? { id: servingIds.get(serving.sourceServingId) }
+                : {}),
               foodId: id,
               servingName: normalizeFoodText(serving.name),
               quantity: serving.quantity,

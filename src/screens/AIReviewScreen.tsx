@@ -7,19 +7,24 @@ import { Button } from "@/components/Button";
 import { Card } from "@/components/Card";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { Screen } from "@/components/Screen";
+import { Segmented } from "@/components/Segmented";
 import { TextField } from "@/components/TextField";
 import { colors, spacing } from "@/config/theme";
 import { useAppStore } from "@/store/useAppStore";
-import { MealEntry } from "@/types/domain";
+import { MealEntry, MealType } from "@/types/domain";
 import { RootStackParamList } from "@/types/navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AIReview">;
+
+const mealTypes: MealType[] = ["breakfast", "lunch", "dinner", "snack"];
 
 export function AIReviewScreen({ navigation, route }: Props) {
   const draft = useAppStore((state) => state.drafts[route.params.draftId]);
   const updateDraft = useAppStore((state) => state.updateDraft);
   const commitDraft = useAppStore((state) => state.commitDraft);
+  const selectedDate = useAppStore((state) => state.selectedDate);
   const [entries, setEntries] = useState<MealEntry[]>(draft?.entries || []);
+  const [mealType, setMealType] = useState<MealType>(draft?.mealType || "snack");
 
   const totals = useMemo(
     () =>
@@ -64,13 +69,13 @@ export function AIReviewScreen({ navigation, route }: Props) {
   }
 
   function save() {
-    updateDraft(draft.draftId, { entries });
-    const meal = commitDraft(draft.draftId);
+    updateDraft(draft.draftId, { entries, mealType });
+    const meal = commitDraft(draft.draftId, selectedDate);
     if (!meal) {
       Alert.alert("Could not save", "Please try again.");
       return;
     }
-    navigation.navigate("MealDetail", { mealId: meal.id });
+    navigation.navigate("MealDetail", { mealId: meal.id, date: selectedDate });
   }
 
   return (
@@ -79,7 +84,7 @@ export function AIReviewScreen({ navigation, route }: Props) {
         <Button label="Back" variant="ghost" icon="chevron-back" onPress={() => navigation.goBack()} />
         <View style={styles.titleBlock}>
           <AppText variant="h1" weight="800">{draft.title}</AppText>
-          <ConfidenceBadge value={draft.inference.confidence} />
+          {draft.inference ? <ConfidenceBadge value={draft.inference.confidence} /> : null}
         </View>
       </View>
 
@@ -93,7 +98,12 @@ export function AIReviewScreen({ navigation, route }: Props) {
         </View>
       </Card>
 
-      {draft.inference.clarifyingQuestions.length ? (
+      <Card style={styles.questions}>
+        <AppText variant="small" color={colors.muted} weight="700">Meal</AppText>
+        <Segmented value={mealType} onChange={setMealType} options={mealTypes.map((type) => ({ value: type, label: mealTypeLabel(type) }))} />
+      </Card>
+
+      {draft.inference?.clarifyingQuestions.length ? (
         <Card style={styles.questions}>
           <AppText variant="small" color={colors.warning} weight="800">Check before saving</AppText>
           {draft.inference.clarifyingQuestions.map((question) => (
@@ -125,6 +135,10 @@ export function AIReviewScreen({ navigation, route }: Props) {
       <Button label="Save meal" icon="checkmark" onPress={save} />
     </Screen>
   );
+}
+
+function mealTypeLabel(type: MealType) {
+  return type === "snack" ? "Snacks" : type.slice(0, 1).toUpperCase() + type.slice(1);
 }
 
 function Macro({ label, value, unit = "" }: { label: string; value: number; unit?: string }) {

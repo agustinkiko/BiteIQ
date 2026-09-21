@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "MacroMind",
+    "name": "biteIQ",
     "slug": "myfitnesspal-ai",
-    "scheme": "macromind",
+    "scheme": "biteiq",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -12,9 +12,9 @@
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
-        "NSCameraUsageDescription": "MacroMind uses the camera to capture meals, barcodes, and nutrition labels.",
-        "NSMicrophoneUsageDescription": "MacroMind uses the microphone to capture spoken meal descriptions.",
-        "NSPhotoLibraryUsageDescription": "MacroMind lets you choose meal photos from your library."
+        "NSCameraUsageDescription": "biteIQ uses the camera to capture meals, barcodes, and nutrition labels.",
+        "NSMicrophoneUsageDescription": "biteIQ uses the microphone to capture spoken meal descriptions.",
+        "NSPhotoLibraryUsageDescription": "biteIQ lets you choose meal photos from your library."
       }
     },
     "android": {
@@ -30,7 +30,9 @@
     },
     "plugins": [
       "expo-camera",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-font",
+      "expo-secure-store"
     ]
   }
 }

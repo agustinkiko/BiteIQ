@@ -9,4 +9,6 @@ resources:
   - migration-job.yaml
   - api-service.yaml
   - api-deployment.yaml
+  - web-service.yaml
+  - web-deployment.yaml
   - api-ingress.yaml

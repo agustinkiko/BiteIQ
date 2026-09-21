@@ -1,6 +1,7 @@
 import { apiRequest } from "@/api/client";
 import { ApiError } from "@/api/contracts";
 import { authClient } from "@/auth/authClient";
+import { Platform } from "react-native";
 
 jest.mock("@/auth/authClient", () => ({
   authClient: { getCookie: jest.fn() }
@@ -44,8 +45,22 @@ describe("apiRequest", () => {
     const headers = new Headers(options?.headers);
     expect(options?.credentials).toBe("include");
     expect(headers.get("accept")).toBe("application/json");
-    expect(headers.get("content-type")).toBe("application/json");
+    expect(headers.has("content-type")).toBe(false);
     expect(headers.get("cookie")).toBe("better-auth.session_token=session-value");
+  });
+
+  it("does not mark a bodyless DELETE as JSON", async () => {
+    fetchMock.mockResolvedValue(response(200, { diary: { entries: [] } }));
+    await apiRequest("/diary/entries/qa-entry", { method: "DELETE" });
+    const options = fetchMock.mock.calls[0][1];
+    expect(new Headers(options?.headers).has("content-type")).toBe(false);
+    expect(options?.body).toBeUndefined();
+  });
+
+  it("sets JSON content type when a request has a JSON body", async () => {
+    fetchMock.mockResolvedValue(response(200, { ok: true }));
+    await apiRequest("/me", { method: "PATCH", body: "{}" });
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("content-type")).toBe("application/json");
   });
 
   it("replaces a lowercase caller cookie in object headers with the secure cookie", async () => {
@@ -81,6 +96,25 @@ describe("apiRequest", () => {
     const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
     expect(headers.has("cookie")).toBe(false);
     expect(headers.get("accept")).toBe("application/problem+json");
+  });
+
+  it("uses browser-managed cookies on web without reading SecureStore", async () => {
+    const platform = jest.replaceProperty(Platform, "OS", "web");
+    mockGetCookie.mockImplementation(() => {
+      throw new Error("SecureStore is unavailable on web.");
+    });
+    fetchMock.mockResolvedValue(response(200, { profile: null }));
+
+    try {
+      await expect(apiRequest("/me")).resolves.toEqual({ profile: null });
+
+      expect(mockGetCookie).not.toHaveBeenCalled();
+      const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
+      expect(headers.has("cookie")).toBe(false);
+      expect(fetchMock.mock.calls[0][1]?.credentials).toBe("include");
+    } finally {
+      platform.restore();
+    }
   });
 
   it("maps an unauthorized response to AUTH_REQUIRED", async () => {

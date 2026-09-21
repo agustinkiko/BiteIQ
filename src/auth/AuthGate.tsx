@@ -1,7 +1,9 @@
-import { PropsWithChildren, ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { PropsWithChildren, ReactNode, useEffect, useRef } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import { authClient } from "@/auth/authClient";
+import { clearSignedOutSessionData, clearUserSessionData } from "@/auth/sessionCleanup";
 import { colors } from "@/config/theme";
 import { LoginScreen } from "@/screens/LoginScreen";
 import { OnboardingScreen } from "@/screens/OnboardingScreen";
@@ -37,8 +39,32 @@ export function AuthGate({
   profileSetupFallback = <OnboardingScreen />
 }: Props) {
   const session = useSession();
-  const localProfileExists = useAppStore((state) => state.hasCompletedOnboarding);
+  const queryClient = useQueryClient();
+  const sessionUserId = session.data?.user.id;
+  const previousSessionUserId = useRef<string>();
+  const storedUserId = useAppStore((state) => state.serverStateUserId);
+  const localProfileExists = useAppStore(
+    (state) =>
+      Boolean(sessionUserId) &&
+      state.hasCompletedOnboarding &&
+      state.serverStateUserId === sessionUserId
+  );
   const profileExists = hasProfile ?? localProfileExists;
+
+  useEffect(() => {
+    if (session.isPending) return;
+    if (!sessionUserId) {
+      clearSignedOutSessionData(queryClient, storedUserId ?? previousSessionUserId.current);
+      previousSessionUserId.current = undefined;
+      return;
+    }
+    if (previousSessionUserId.current && previousSessionUserId.current !== sessionUserId) {
+      clearUserSessionData(queryClient, previousSessionUserId.current);
+    } else if (storedUserId && storedUserId !== sessionUserId) {
+      clearUserSessionData(queryClient, storedUserId);
+    }
+    previousSessionUserId.current = sessionUserId;
+  }, [queryClient, session.isPending, sessionUserId, storedUserId]);
 
   if (session.isPending) return <>{loadingFallback}</>;
   if (!session.data) return <>{signedOutFallback}</>;

@@ -1,5 +1,6 @@
 import {
   AssistantAnswer,
+  AssistantChatInput,
   BarcodeInterpretation,
   CaptureInput,
   MealParseResult,
@@ -15,5 +16,5 @@ export interface ModelProvider {
   parseNutritionLabel(input: CaptureInput): Promise<StructuredAIResult<NutritionLabelParse>>;
   parseNaturalLanguageMeal(input: CaptureInput): Promise<StructuredAIResult<MealParseResult>>;
   estimateNutrition(input: CaptureInput): Promise<StructuredAIResult<MealParseResult>>;
-  chat(input: { message: string }): Promise<StructuredAIResult<AssistantAnswer>>;
+  chat(input: AssistantChatInput): Promise<StructuredAIResult<AssistantAnswer>>;
 }

@@ -1,65 +1,118 @@
-# MacroMind
+# BiteIQ
 
-MacroMind is an Android-first Expo MVP for AI-first nutrition tracking. The main workflow is capture-first food logging: meal photo, barcode, nutrition label, text, or voice-style input flows into a structured AI review screen before a meal is saved.
+BiteIQ is a private, self-hosted food diary for exactly two independent private people. Each person has an isolated account, profile, goal, and diary. The current foundation slice is an Expo client backed by Fastify and PostgreSQL. It supports private email/password sign-in, profile and goal persistence, canonical food search, and server-owned diary APIs. See [the API reference](docs/API.md) and [nutrition-data policy](docs/NUTRITION_DATA.md).
 
-## Architecture Summary
+The server diary, limited offline new-entry queue, sign-out, and account-owned cache cleanup are implemented. The [2026-09-19 end-to-end report](dogfood-output/2026-09-19/report.md) records 315 automated tests, real browser flows, 30 live USDA source comparisons, and API/database-restart persistence. This run used the native API with Docker PostgreSQL because the development API container's dependency installation failed. Device, container startup, live K3s, and restore acceptance remain separate gates.
 
-- **Mobile shell:** Expo + React Native + TypeScript, with React Navigation for tabs and stack flows.
-- **State:** Zustand stores onboarding, goals, daily logs, provider settings, and chat history.
-- **Async services:** TanStack Query wraps AI inference calls and keeps the UI responsive.
-- **AI abstraction:** Provider adapters implement a shared `ModelProvider` interface. Mock, local Codex, local Claude, and future hosted providers can be swapped without changing screens.
-- **Structured AI tasks:** OCR, barcode interpretation, meal photo recognition, label parsing, text parsing, portion estimation, nutrition estimation, and chat reasoning are represented as typed tasks with Zod schemas.
-- **Provenance:** Estimated foods and macros carry value sources such as AI vision, OCR, barcode lookup, nutrition database, user correction, and manual entry.
+AI capture, barcode, label, voice, fasting, subscriptions, planning, and the legacy bundled-food path are development previews only. They are not supported production flows.
 
-## Folder Structure
+## Prerequisites
 
-```text
-src/
-  components/       Reusable mobile UI primitives
-  config/           Theme, defaults, provider presets
-  hooks/            Screen hooks and app selectors
-  navigation/       Root stack and tab navigation
-  screens/          Product screens
-  services/         AI, meal pipeline, nutrition helpers
-  store/            Zustand app store
-  types/            Domain, AI, and navigation types
-```
+- Node.js 22
+- npm
+- Docker Desktop with Compose
+- Expo Go for a device run, or a browser for Expo web
+- `kubectl` only for private K3s deployment and recovery work
 
-## Run On Android
+## Local setup
 
-1. Install dependencies:
+1. Install dependencies.
 
    ```sh
    npm install
+   npm --prefix server install
    ```
 
-2. Start Expo:
+2. Copy `.env.example` to a private `.env`. Generate a unique `AUTH_SECRET` of at least 32 characters for production. Set `EXPO_PUBLIC_API_URL` to the API base with `/api`; a phone must use the operator's LAN address, not `localhost`.
+
+3. Start local PostgreSQL and the development API.
 
    ```sh
-   npm run android
+   docker compose -f deploy/compose.yaml up -d
    ```
 
-3. Use an Android emulator or Expo Go on a physical Android phone.
+4. Apply migrations.
 
-The MVP uses mock AI by default. To connect a local assistant on your LAN, open **Settings**, choose `local-codex` or `local-claude`, and set a base URL such as `http://192.168.1.20:8787`.
+   ```sh
+   set -a
+   source .env
+   set +a
+   npm --prefix server run db:migrate
+   ```
 
-If Metro reports `EMFILE: too many open files`, raise the shell watcher limit before starting Expo:
+5. Create each private account from an interactive terminal. The command prompts twice for a password and refuses password command-line arguments.
+
+   ```sh
+   set -a
+   source .env
+   set +a
+   npm --prefix server run account:create -- --email operator-supplied@example.test --name 'Private User'
+   ```
+
+   Reset a password—and revoke active sessions—with:
+
+   ```sh
+   set -a
+   source .env
+   set +a
+   npm --prefix server run account:reset-password -- --email operator-supplied@example.test
+   ```
+
+6. Start Expo in another terminal.
+
+   ```sh
+   set -a
+   source .env
+   set +a
+   npm start
+   ```
+
+## Checks and builds
+
+Health proves only the API process and PostgreSQL dependency:
 
 ```sh
-ulimit -n 65536
-npm start -- --localhost --port 8081
+curl http://127.0.0.1:4000/api/health/live
+curl http://127.0.0.1:4000/api/health/ready
 ```
 
-## Android Notes
+Run the client checks:
 
-- Camera permission is required for meal photos, barcodes, and nutrition labels.
-- Microphone permission is declared for the voice flow. The current MVP models voice as text capture so the UI and pipeline are in place without committing to a speech-to-text provider.
-- For real local inference from an Android device, use your machine LAN IP instead of `localhost`.
+```sh
+npm run test:client
+npm run typecheck
+npm run lint
+npx expo export --platform web
+```
 
-## Next High-Value Features
+Run the server checks. Integration tests use the guarded local test database and must not point at personal or live data:
 
-1. Add real camera capture previews and barcode frame detection using `expo-camera`.
-2. Add on-device or local-network speech-to-text for the voice meal flow.
-3. Persist logs and settings with SQLite or a backend sync service.
-4. Connect provider adapters to real Codex/Claude local endpoints with streaming and retries.
-5. Add correction learning so user edits improve future serving and food estimates.
+```sh
+npm --prefix server test
+npm --prefix server run test:integration
+npm --prefix server run typecheck
+npm --prefix server run lint
+npm --prefix server run build
+```
+
+Build the production API image:
+
+```sh
+docker build -f server/Dockerfile -t biteiq-api:verify .
+```
+
+See the [latest end-to-end evidence](dogfood-output/2026-09-19/report.md), [feature coverage and missing work](docs/e2e-feature-matrix.md), and [earlier implementation checklist](docs/IMPLEMENTATION_CHECKLIST.md). Passing the supported diary workflow does not complete the full original specification.
+
+## Private K3s and recovery
+
+`deploy/k8s/base` defines the private API, migration Job, PostgreSQL StatefulSet and ClusterIP services. `deploy/k8s/example` is a private LAN/VPN example with `biteiq.home.arpa` and Traefik TLS redirect. PostgreSQL has no Ingress.
+
+Before deployment, create the separately managed `biteiq-secrets` Secret from `deploy/k8s/base/secret.example.yaml`, set image tags in both example Kustomizations, and create the TLS Secret. Use the migration-first release sequence in [K3s operations](docs/OPERATIONS.md). The manifests render locally, but no live K3s deployment is recorded.
+
+Backups are PostgreSQL custom-format dumps with SHA-256 verification and encrypted private storage. Restore first into a disposable PostgreSQL instance; only then take the API offline, take a fresh backup, and run the explicit `pg_restore --clean --if-exists` recovery command. [K3s operations](docs/OPERATIONS.md) has the exact safe commands and recovery scale-up step. A copied dump is not a verified backup.
+
+## Security boundary
+
+Public sign-up is disabled. Account creation and password reset run only through interactive operator commands. Protected routes derive ownership from the session and return neutral not-found responses for another user's diary entry.
+
+Keep `AUTH_SECRET`, `DATABASE_URL`, `USDA_FDC_API_KEY`, cookies, and passwords out of Git, Expo public variables, browser bundles, screenshots, and logs. The historical source includes development-only code outside the foundation path; a source scan alone is not secret-boundary proof.

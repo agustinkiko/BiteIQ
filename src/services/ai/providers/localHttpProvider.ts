@@ -4,6 +4,7 @@ import { assistantAnswerSchema, mealParseResultSchema, ocrExtractionSchema, barc
 import { ModelProvider } from "@/services/ai/providers/types";
 import {
   AssistantAnswer,
+  AssistantChatInput,
   BarcodeInterpretation,
   CaptureInput,
   MealParseResult,
@@ -49,7 +50,7 @@ export class LocalHttpProvider implements ModelProvider {
     return this.post("nutritionEstimation", input, mealParseResultSchema) as Promise<StructuredAIResult<MealParseResult>>;
   }
 
-  chat(input: { message: string }): Promise<StructuredAIResult<AssistantAnswer>> {
+  chat(input: AssistantChatInput): Promise<StructuredAIResult<AssistantAnswer>> {
     return this.post("assistantChatReasoning", input, assistantAnswerSchema);
   }
 
@@ -65,8 +66,7 @@ export class LocalHttpProvider implements ModelProvider {
       const response = await fetch(`${this.config.baseUrl.replace(/\/$/, "")}/ai/tasks/${task}`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          ...(this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {})
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           model: this.config.modelName,

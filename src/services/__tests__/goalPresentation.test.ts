@@ -1,5 +1,6 @@
 import {
   centimetersFromFeetAndInches,
+  feetAndInchesFromCentimeters,
   formatGoalExplanation,
   kilogramsFromPounds
 } from "@/services/goalPresentation";
@@ -48,6 +49,17 @@ describe("formatGoalExplanation", () => {
 });
 
 describe("imperial form conversion", () => {
+  it("carries rounded inches into the next foot so a saved 182 cm profile remains valid", () => {
+    expect(feetAndInchesFromCentimeters(182)).toEqual({ feet: 6, inches: 0 });
+  });
+
+  it.each([151.5, 152.4, 180, 182, 182.88, 210])("keeps rounded height %s cm in valid feet and inches", (centimeters) => {
+    const { feet, inches } = feetAndInchesFromCentimeters(centimeters);
+    expect(inches).toBeGreaterThanOrEqual(0);
+    expect(inches).toBeLessThan(12);
+    expect(Math.abs(centimetersFromFeetAndInches(feet, inches) - centimeters)).toBeLessThanOrEqual(1.27);
+  });
+
   it("converts feet and inches to API centimeters at the form boundary", () => {
     expect(centimetersFromFeetAndInches(5, 10)).toBeCloseTo(177.8, 5);
   });

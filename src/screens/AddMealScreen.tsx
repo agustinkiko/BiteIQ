@@ -11,7 +11,10 @@ import { Card } from "@/components/Card";
 import { Screen } from "@/components/Screen";
 import { TextField } from "@/components/TextField";
 import { colors, spacing } from "@/config/theme";
-import { useTodayLog } from "@/hooks/useTodayLog";
+import { getFoodByBarcode } from "@/data/foodDatabase";
+import { useDayLog } from "@/hooks/useDayLog";
+import { formatDiaryDate } from "@/services/dates";
+import { lookupBarcode } from "@/services/food/foodSources";
 import { buildMealDraft } from "@/services/mealPipeline";
 import { useAppStore } from "@/store/useAppStore";
 import { CaptureInput } from "@/types/ai";
@@ -22,11 +25,14 @@ type Props = NativeStackScreenProps<RootStackParamList, "AddMeal">;
 
 export function AddMealScreen({ navigation, route }: Props) {
   const [text, setText] = useState("");
+  const [barcode, setBarcode] = useState("");
   const user = useAppStore((state) => state.user);
   const goal = useAppStore((state) => state.goal);
   const providerConfig = useAppStore((state) => state.providerConfig);
+  const foodSourceConfig = useAppStore((state) => state.foodSourceConfig);
   const saveDraft = useAppStore((state) => state.saveDraft);
-  const { log } = useTodayLog();
+  const cacheFood = useAppStore((state) => state.cacheFood);
+  const { date, log } = useDayLog(route.params?.date);
 
   const mutation = useMutation({
     mutationFn: (input: CaptureInput) =>
@@ -42,6 +48,32 @@ export function AddMealScreen({ navigation, route }: Props) {
       navigation.navigate("AIReview", { draftId: draft.draftId });
     },
     onError: (error) => Alert.alert("AI estimate failed", error instanceof Error ? error.message : "Please try again.")
+  });
+
+  /**
+   * Barcodes resolve against the food catalogs first — an exact packaged-food
+   * match beats an AI estimate. Only unknown codes fall through to the model.
+   */
+  const barcodeMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const local = getFoodByBarcode(code);
+      if (local) return local;
+      return lookupBarcode(code, foodSourceConfig);
+    },
+    onSuccess: (food, code) => {
+      if (food) {
+        cacheFood(food);
+        navigation.replace("FoodDetail", {
+          mode: "add",
+          date,
+          mealType: route.params?.mealType || "snack",
+          foodId: food.id
+        });
+        return;
+      }
+      mutation.mutate({ mode: "barcode", text: `Barcode ${code}`, barcode: code, mealType: route.params?.mealType });
+    },
+    onError: (error) => Alert.alert("Barcode lookup failed", error instanceof Error ? error.message : "Please try again.")
   });
 
   async function submitCapture(mode: CaptureMode) {
@@ -63,17 +95,11 @@ export function AddMealScreen({ navigation, route }: Props) {
     }
 
     if (mode === "barcode") {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert("Camera permission needed", "Enable camera access to scan barcodes.");
+      if (!barcode.trim()) {
+        Alert.alert("Enter a barcode", "Type the number under the barcode, or use a photo capture instead.");
         return;
       }
-      mutation.mutate({
-        mode,
-        text: "Barcode scan demo",
-        barcode: "012345678905",
-        mealType: route.params?.mealType
-      });
+      barcodeMutation.mutate(barcode.trim());
       return;
     }
 
@@ -94,7 +120,11 @@ export function AddMealScreen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Button label="Back" variant="ghost" icon="chevron-back" onPress={() => navigation.goBack()} />
         <AppText variant="h1" weight="800">
-          Add meal
+          AI capture
+        </AppText>
+        <AppText variant="small" color={colors.muted}>
+          {formatDiaryDate(date)}
+          {route.params?.mealType ? ` • ${route.params.mealType}` : ""}
         </AppText>
       </View>
 
@@ -106,10 +136,26 @@ export function AddMealScreen({ navigation, route }: Props) {
         onPress={() => submitCapture("photo")}
       />
 
-      <View style={styles.options}>
-        <CaptureOption icon="barcode" title="Barcode" detail="Use packaged food data when available." onPress={() => submitCapture("barcode")} />
-        <CaptureOption icon="document-text" title="Nutrition label" detail="Extract facts from a label photo." onPress={() => submitCapture("label")} />
-      </View>
+      <CaptureOption
+        icon="document-text"
+        title="Nutrition label"
+        detail="Extract facts from a label photo."
+        onPress={() => submitCapture("label")}
+      />
+
+      <Card style={styles.textCard}>
+        <TextField
+          label="Barcode"
+          value={barcode}
+          onChangeText={setBarcode}
+          placeholder="e.g. 737628064502"
+          keyboardType="number-pad"
+        />
+        <AppText variant="tiny" color={colors.muted}>
+          Looked up in Open Food Facts and your other enabled catalogs first, then estimated by AI if the code is unknown.
+        </AppText>
+        <Button label="Look up barcode" icon="barcode" onPress={() => submitCapture("barcode")} />
+      </Card>
 
       <Card style={styles.textCard}>
         <TextField
@@ -126,10 +172,12 @@ export function AddMealScreen({ navigation, route }: Props) {
         </View>
       </Card>
 
-      {mutation.isPending ? (
+      {mutation.isPending || barcodeMutation.isPending ? (
         <Card style={styles.loading}>
           <ActivityIndicator color={colors.primary} />
-          <AppText color={colors.muted}>Estimating foods, servings, and macros...</AppText>
+          <AppText color={colors.muted}>
+            {barcodeMutation.isPending ? "Looking up the barcode..." : "Estimating foods, servings, and macros..."}
+          </AppText>
         </Card>
       ) : null}
     </Screen>

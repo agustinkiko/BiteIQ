@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -6,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createDb } from "../../src/db/client.js";
 import { createFoodRepository } from "../../src/modules/foods/repository.js";
 import type { ProviderFood } from "../../src/providers/nutrition/types.js";
+import { createUsdaProvider } from "../../src/providers/nutrition/usda.js";
 import {
   createIntegrationPool,
   integrationDatabaseUrl,
@@ -33,6 +35,49 @@ describe("canonical food repository", () => {
   afterAll(async () => {
     await pool?.end();
     await db.$client.end();
+  });
+
+  it("persists real USDA adapter output through the canonical database constraints", async () => {
+    const payload = JSON.parse(await readFile(
+      new URL("../fixtures/usda-detail.json", import.meta.url), "utf8",
+    ));
+    const provider = createUsdaProvider({ apiKey: "fixture-test-key" }, async () =>
+      new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } }),
+    );
+    const adapted = (await provider.getFood(String(payload.fdcId)))!;
+    const persisted = await repository.upsertProviderFood(adapted);
+
+    expect(persisted.foodType).toBe(adapted.foodType);
+    expect(persisted.calories).toBe(adapted.calories);
+    expect(persisted.nutrients).toEqual(adapted.nutrients);
+    expect(persisted.source).toMatchObject({ provider: "usda", externalId: adapted.externalId });
+    expect(persisted.servings).toHaveLength(adapted.servings.length);
+  });
+
+  it("preserves a USDA liquid's volume basis and label serving through persistence", async () => {
+    const payload = {
+      fdcId: 1909132,
+      description: "Whole milk",
+      dataType: "Branded",
+      servingSize: 236,
+      servingSizeUnit: "ml",
+      householdServingFullText: "1 cup",
+      foodNutrients: [
+        { nutrientId: 1008, value: 55, unitName: "KCAL" },
+        { nutrientId: 1003, value: 3.39, unitName: "G" },
+      ],
+    };
+    const provider = createUsdaProvider({ apiKey: "fixture-test-key" }, async () =>
+      new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } }),
+    );
+    const persisted = await repository.upsertProviderFood((await provider.getFood("1909132"))!);
+
+    expect(persisted.basisQuantity).toBe("100.0000");
+    expect(persisted.basisUnit).toBe("ml");
+    expect(persisted.calories).toBe("55.000000");
+    expect(persisted.servings).toContainEqual(expect.objectContaining({
+      name: "1 cup", gramWeight: null, milliliterVolume: "236.0000",
+    }));
   });
 
   it("upserts a provider record idempotently and replaces provider-owned nutrition", async () => {
@@ -100,6 +145,19 @@ describe("canonical food repository", () => {
       nutrients: "2",
       servings: "1",
     });
+  });
+
+  it("keeps selected serving IDs valid when another search refreshes the same source food", async () => {
+    const first = await repository.upsertProviderFood(providerFood());
+    const ids = Object.fromEntries(first.servings.map(serving => [serving.sourceServingId, serving.id]));
+    const refreshed = await repository.upsertProviderFood(providerFood({
+      calories: "166.000000",
+      servings: providerFood().servings.map(serving => ({ ...serving, name: `${serving.name} refreshed` })),
+    }));
+
+    expect(Object.fromEntries(refreshed.servings.map(serving => [serving.sourceServingId, serving.id]))).toEqual(ids);
+    expect(refreshed.calories).toBe("166.000000");
+    expect(refreshed.servings.every(serving => serving.name.endsWith("refreshed"))).toBe(true);
   });
 
   it("normalizes Unicode and whitespace when matching names and aliases", async () => {

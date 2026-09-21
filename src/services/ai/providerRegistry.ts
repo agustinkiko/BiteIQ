@@ -7,6 +7,9 @@ export function createModelProvider(config: ModelProviderConfig): ModelProvider 
   if (config.providerType === "mock") {
     return new MockModelProvider(config);
   }
+  if (["local-codex", "local-claude", "hosted"].includes(config.providerType)) {
+    return new LocalHttpProvider(config);
+  }
 
-  return new LocalHttpProvider(config);
+  throw new Error("Direct AI provider credentials are not supported in the client.");
 }

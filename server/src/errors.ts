@@ -31,6 +31,23 @@ export function registerErrorHandler(app: {
   ) => void;
 }): void {
   app.setErrorHandler((error, request, reply) => {
+    if (
+      error.code === "FST_ERR_CTP_EMPTY_JSON_BODY"
+      || error.code === "FST_ERR_CTP_INVALID_JSON_BODY"
+    ) {
+      request.log.warn(
+        { code: ErrorCode.INVALID_INPUT, parserCode: error.code },
+        "request body is not valid JSON",
+      );
+      void reply.status(400).send({
+        error: {
+          code: ErrorCode.INVALID_INPUT,
+          message: "Request body must contain valid JSON.",
+        },
+      });
+      return;
+    }
+
     if (error.code === "FST_ERR_CTP_BODY_TOO_LARGE") {
       request.log.warn(
         { err: error, code: ErrorCode.INVALID_INPUT },
