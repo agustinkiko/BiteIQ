@@ -2,14 +2,14 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-nameSuffix: -release-2
+nameSuffix: -release-4
 images:
   - name: ghcr.io/example/biteiq-api
     newName: ghcr.io/agustinkiko/biteiq-api
-    newTag: main-a7dcd3357930f7a3622dbed6aedfd6af3a65d7ac-2
+    newTag: main-589fa8718294735aedc134308206b4aad57d5fe0-4
   - name: ghcr.io/example/biteiq-web
     newName: ghcr.io/agustinkiko/biteiq-web
-    newTag: main-a7dcd3357930f7a3622dbed6aedfd6af3a65d7ac-2
+    newTag: main-589fa8718294735aedc134308206b4aad57d5fe0-4
 patches:
   - patch: |-
       $patch: delete

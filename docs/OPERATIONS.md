@@ -12,16 +12,16 @@ Flux reconciles database, migration, and app in that order. Secrets and TLS keys
 are provisioned separately and are never stored in Git. Database pruning is
 disabled so removing the Flux definition cannot prune the database workload.
 
-Release image tag: `main-a7dcd3357930f7a3622dbed6aedfd6af3a65d7ac-2`.
-API digest: `sha256:5d38b0d9e0172e1e9e58f4eaea6601ac089519c7127c988fa6bd075374201c4a`.
-Web digest: `sha256:e51e4682a56f58c40852f60b0bd5242809af717e3a017f215af3374214c18f4d`.
+Release image tag: `main-589fa8718294735aedc134308206b4aad57d5fe0-4`.
+API digest: `sha256:591280c5ad85d90022be563e5dee39f33f2f7904da4dcf7e93522d5e33ba66ca`.
+Web digest: `sha256:daeaf227419f989683010283114b3b51f64cfb4bf2ccb138bb4496f9811a3ea3`.
 
 Before a later release, take and verify a database backup. Create a new immutable
 Git release tag, a release-specific GitRepository, and a release-specific migration
 Kustomization. Never move an existing release tag. Update both image tags and
 the migration Job suffix in that release snapshot. In the GitOps registration,
 update the app sourceRef and its migration dependency together. The current
-release is pinned to Git tag `biteiq-release-2`; pushing to main does not change it.
+release is pinned to Git tag `biteiq-release-4`; pushing to main does not change it.
 The app dependency also checks the matching migration label and observed generation.
 Do not enable independent API image automation before verifying this ordering
 across updates. To roll back application code, revert the release tags in Git;
@@ -30,7 +30,7 @@ do not automatically reverse a schema migration or delete a PVC.
 Inspect the actual homelab over SSH, not the local default Kubernetes context:
 
 ```sh
-ssh homelab.jericoagustin.com 'kubectl -n flux-system get gitrepository biteiq-release-2; kubectl -n flux-system get kustomization biteiq-database biteiq-migration-release-2 biteiq-app; kubectl -n biteiq get pods,jobs,pvc,ingress'
+ssh homelab.jericoagustin.com 'kubectl -n flux-system get gitrepository biteiq-release-4; kubectl -n flux-system get kustomization biteiq-database biteiq-migration-release-4 biteiq-app; kubectl -n biteiq get pods,jobs,pvc,ingress'
 ```
 
 Ready pods do not prove browser access. DNS, trusted HTTPS, private account

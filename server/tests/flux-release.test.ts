@@ -37,11 +37,11 @@ describe("Flux release contract", () => {
     const migration = resources.find((r: any) => r.kind === "Kustomization" && r.metadata.name.startsWith("biteiq-migration"));
     const app = resources.find((r: any) => r.kind === "Kustomization" && r.metadata.name === "biteiq-app");
     expect(migration.spec.dependsOn[0].name).toBe("biteiq-database");
-    expect(migration.metadata.name).toBe("biteiq-migration-release-2");
+    expect(migration.metadata.name).toBe("biteiq-migration-release-4");
     expect(app.spec.dependsOn[0].name).toBe(migration.metadata.name);
     const source = resources.find((r: any) => r.kind === "GitRepository");
-    expect(source.metadata.name).toBe("biteiq-release-2");
-    expect(source.spec.ref).toEqual({ tag: "biteiq-release-2" });
+    expect(source.metadata.name).toBe("biteiq-release-4");
+    expect(source.spec.ref).toEqual({ tag: "biteiq-release-4" });
     expect(app.spec.sourceRef.name).toBe(source.metadata.name);
     expect(migration.spec.sourceRef.name).toBe(source.metadata.name);
     expect(app.metadata.labels["biteiq-release"]).toBe(migration.metadata.labels["biteiq-release"]);
