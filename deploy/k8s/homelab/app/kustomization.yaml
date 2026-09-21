@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: biteiq
 resources:
   - ../../example
+  - cloudflare-ingress.yaml
 images:
   - name: ghcr.io/example/biteiq-api
     newName: ghcr.io/agustinkiko/biteiq-api
@@ -41,19 +42,12 @@ patches:
       kind: Job
       metadata:
         name: biteiq-migrate
-  - target:
+  - patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
       kind: Ingress
-      name: biteiq-api
-    patch: |-
-      - op: replace
-        path: /spec/rules/0/host
-        value: biteiq.jericoagustin.com
-      - op: replace
-        path: /spec/tls/0/hosts/0
-        value: biteiq.jericoagustin.com
-      - op: replace
-        path: /spec/tls/0/secretName
-        value: biteiq-tls
+      metadata:
+        name: biteiq-api
   - target:
       kind: Ingress
       name: biteiq-api-http-redirect

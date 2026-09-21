@@ -26,7 +26,20 @@ describe("Flux release contract", () => {
     expect(api.spec.template.spec.containers[0].image).toBe(job.spec.template.spec.containers[0].image);
     expect(api.spec.template.spec.containers[0].image).toMatch(/^ghcr.io\/agustinkiko\/biteiq-api:main-[a-f0-9]{40}-\d+$/);
     const ingresses = stages[2].filter((r: any) => r.kind === "Ingress");
-    expect(ingresses.some((r: any) => r.spec.tls?.[0]?.hosts.includes("biteiq.jericoagustin.com"))).toBe(true);
+    expect(ingresses).toHaveLength(1);
+    expect(ingresses[0].metadata.name).toBe("biteiq-api-http-redirect");
+    const tunnel = stages[2].find((r: any) => r.kind === "IngressRoute");
+    expect(tunnel?.spec.entryPoints).toEqual(["web"]);
+    expect(tunnel.spec.routes.map((r: any) => r.services[0].name)).toEqual(["biteiq-api", "biteiq-web"]);
+    for (const route of tunnel.spec.routes) {
+      expect(route.match).toContain("Host(`biteiq.jericoagustin.com`)");
+      expect(route.match).toContain("HeaderRegexp(`CF-Visitor`");
+      expect(route.match).toContain('"https"');
+      expect(route.middlewares).toBeUndefined();
+    }
+    expect(tunnel.spec.routes[0].priority).toBeGreaterThan(tunnel.spec.routes[1].priority);
+    expect(tunnel.spec.routes[0].match).toContain("PathPrefix(`/api/`)");
+    expect(stages[2].find((r: any) => r.kind === "Middleware").spec.redirectScheme.scheme).toBe("https");
     expect(stages[2].filter((r: any) => r.kind === "Service").every((r: any) => !r.spec.type || r.spec.type === "ClusterIP")).toBe(true);
     expect(stages.flat().filter((r: any) => r.kind !== "Namespace").every((r: any) => r.metadata.namespace === "biteiq")).toBe(true);
   });
@@ -37,11 +50,11 @@ describe("Flux release contract", () => {
     const migration = resources.find((r: any) => r.kind === "Kustomization" && r.metadata.name.startsWith("biteiq-migration"));
     const app = resources.find((r: any) => r.kind === "Kustomization" && r.metadata.name === "biteiq-app");
     expect(migration.spec.dependsOn[0].name).toBe("biteiq-database");
-    expect(migration.metadata.name).toBe("biteiq-migration-release-4");
+    expect(migration.metadata.name).toBe("biteiq-migration-release-5");
     expect(app.spec.dependsOn[0].name).toBe(migration.metadata.name);
     const source = resources.find((r: any) => r.kind === "GitRepository");
-    expect(source.metadata.name).toBe("biteiq-release-4");
-    expect(source.spec.ref).toEqual({ tag: "biteiq-release-4" });
+    expect(source.metadata.name).toBe("biteiq-release-5");
+    expect(source.spec.ref).toEqual({ tag: "biteiq-release-5" });
     expect(app.spec.sourceRef.name).toBe(source.metadata.name);
     expect(migration.spec.sourceRef.name).toBe(source.metadata.name);
     expect(app.metadata.labels["biteiq-release"]).toBe(migration.metadata.labels["biteiq-release"]);

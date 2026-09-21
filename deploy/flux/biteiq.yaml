@@ -1,13 +1,13 @@
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
-  name: biteiq-release-4
+  name: biteiq-release-5
   namespace: flux-system
 spec:
   interval: 1m
   url: https://github.com/agustinkiko/BiteIQ.git
   ref:
-    tag: biteiq-release-4
+    tag: biteiq-release-5
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -22,12 +22,12 @@ spec:
   timeout: 5m
   sourceRef:
     kind: GitRepository
-    name: biteiq-release-4
+    name: biteiq-release-5
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: biteiq-migration-release-4
+  name: biteiq-migration-release-5
   namespace: flux-system
   labels:
     biteiq-release: main-589fa8718294735aedc134308206b4aad57d5fe0-4
@@ -39,7 +39,7 @@ spec:
   timeout: 5m
   sourceRef:
     kind: GitRepository
-    name: biteiq-release-4
+    name: biteiq-release-5
   dependsOn:
     - name: biteiq-database
 ---
@@ -58,9 +58,9 @@ spec:
   timeout: 5m
   sourceRef:
     kind: GitRepository
-    name: biteiq-release-4
+    name: biteiq-release-5
   dependsOn:
-    - name: biteiq-migration-release-4
+    - name: biteiq-migration-release-5
       readyExpr: >-
         dep.metadata.labels['biteiq-release'] == self.metadata.labels['biteiq-release'] &&
         dep.status.conditions.exists(e, e.type == 'Ready' && e.status == 'True') &&
