@@ -2,9 +2,9 @@
 
 ## Deployed
 
-- Flux source: `biteiq-release-4`, Git tag at `e579444f8f9edcb48e8fc0f2953e536992339ed5`.
-- GitOps registration commit: `39c11b2540c28df9cdabd7bf0d6bb128677a34ea` in `agustinkiko/jericoagustin`.
-- All three Flux stages report Ready: database, migration-release-4, app.
+- Flux source: `biteiq-release-5`, Git tag at `940a8d1885e0f66242952a393fa654afb1e8b1c0`.
+- GitOps registration commit: `86bea1234a1be477215611e72ab22a08bb0cdb25` in `agustinkiko/jericoagustin`.
+- Routing-only release 5 retains the tested release 4 images and schema; migration-release-5 completed.
 - Two API pods, one web pod, PostgreSQL, and a completed migration Job.
 - API/web image tag: `main-589fa8718294735aedc134308206b4aad57d5fe0-4`.
 - API digest: `sha256:591280c5ad85d90022be563e5dee39f33f2f7904da4dcf7e93522d5e33ba66ca`.
@@ -31,11 +31,19 @@
 - The first acceptance harness incorrectly included create-only clientId in PATCH. The API correctly rejected it; the harness was corrected, not the API contract.
 - One image pull encountered transient homelab DNS failure and recovered automatically.
 
+## Cloudflare preparation
+
+- User approved public access with BiteIQ login, then selected manual restart rather than passwordless sudo.
+- The authenticated homelab `cloudflared` CLI added the hostname DNS route to the existing tunnel.
+- Backed up the tunnel config and added only the BiteIQ hostname route. Validation passes and the existing SSH rule remains unchanged. The running tunnel was NOT restarted.
+- Flux owns the new HTTP-origin IngressRoute. Cloudflare's `CF-Visitor` HTTPS metadata selects API/web routes; plain HTTP retains the HTTPS redirect. This header is routing metadata, not authentication. Production secure cookies and private signup policy remain unchanged.
+- Verified seven live origin checks: plain HTTP redirects; HTTP visitor redirects; HTTPS web HTML; HTTPS API readiness; protected API returns 401; header whitespace accepted; unknown host returns 404.
+- Initial Node fetch probe discarded the custom Host header and returned 404. Rechecked with curl and corrected the probe to Node http; no application change was needed.
+- No new Traefik route parser errors were observed. The old missing-origin-certificate route was removed; browser TLS is handled by Cloudflare.
+
 ## Remaining acceptance gates
 
-- Requested hostname is `biteiq.jericoagustin.com`. The externally resolved HTTPS endpoint still returns 404; no public tunnel route has been added.
-- A private ingress is configured, but `biteiq-tls` has not been provisioned. Browser DNS/TLS/access acceptance is not complete.
-- Await LAN/VPN versus public Cloudflare Tunnel access choice.
+- Requested hostname is `biteiq.jericoagustin.com`. Public acceptance awaits the user's manual Cloudflare service restart. Then verify actual HTTPS, HTTP redirect (including spoofed visitor headers), browser login, and diary behavior.
 - Await the two new account email addresses. No household accounts or passwords have been created.
 - Browser login and full browser diary acceptance remain unverified. Internal HTTP API tests do not prove HTTPS cookie transport or browser behavior.
 - Full original product features remain subject to `docs/e2e-feature-matrix.md`; this release does not claim missing features were implemented.
