@@ -1,0 +1,76 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+nameSuffix: -release-2
+images:
+  - name: ghcr.io/example/biteiq-api
+    newName: ghcr.io/agustinkiko/biteiq-api
+    newTag: main-a7dcd3357930f7a3622dbed6aedfd6af3a65d7ac-2
+  - name: ghcr.io/example/biteiq-web
+    newName: ghcr.io/agustinkiko/biteiq-web
+    newTag: main-a7dcd3357930f7a3622dbed6aedfd6af3a65d7ac-2
+patches:
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: biteiq
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: biteiq-api-config
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: biteiq-postgres
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: biteiq-postgres
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: biteiq-api
+  - patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: biteiq-web
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: biteiq-api
+  - patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: biteiq-web
+  - patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: biteiq-api
+  - target:
+      kind: Job
+      name: biteiq-migrate
+    patch: |-
+      - op: remove
+        path: /spec/ttlSecondsAfterFinished
+      - op: replace
+        path: /spec/template/spec/containers/0/command
+        value: [node, dist/db/migrate.js]

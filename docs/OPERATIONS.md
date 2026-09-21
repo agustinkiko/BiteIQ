@@ -1,5 +1,42 @@
 # BiteIQ K3s Operations
 
+## Homelab Flux release
+
+The live homelab target is `https://biteiq.jericoagustin.com`. The
+`biteiq.home.arpa` files below remain generic private examples, not the selected
+live hostname. Use the `deploy/k8s/homelab` stages for this release.
+
+GitHub Actions publishes matching immutable API/web tags. `deploy/flux/biteiq.yaml`
+is registered in the homelab GitOps repository, `clusters/homelab/biteiq.yaml`.
+Flux reconciles database, migration, and app in that order. Secrets and TLS keys
+are provisioned separately and are never stored in Git. Database pruning is
+disabled so removing the Flux definition cannot prune the database workload.
+
+Release image tag: `main-a7dcd3357930f7a3622dbed6aedfd6af3a65d7ac-2`.
+API digest: `sha256:5d38b0d9e0172e1e9e58f4eaea6601ac089519c7127c988fa6bd075374201c4a`.
+Web digest: `sha256:e51e4682a56f58c40852f60b0bd5242809af717e3a017f215af3374214c18f4d`.
+
+Before a later release, take and verify a database backup. Create a new immutable
+Git release tag, a release-specific GitRepository, and a release-specific migration
+Kustomization. Never move an existing release tag. Update both image tags and
+the migration Job suffix in that release snapshot. In the GitOps registration,
+update the app sourceRef and its migration dependency together. The current
+release is pinned to Git tag `biteiq-release-2`; pushing to main does not change it.
+The app dependency also checks the matching migration label and observed generation.
+Do not enable independent API image automation before verifying this ordering
+across updates. To roll back application code, revert the release tags in Git;
+do not automatically reverse a schema migration or delete a PVC.
+
+Inspect the actual homelab over SSH, not the local default Kubernetes context:
+
+```sh
+ssh homelab.jericoagustin.com 'kubectl -n flux-system get gitrepository biteiq-release-2; kubectl -n flux-system get kustomization biteiq-database biteiq-migration-release-2 biteiq-app; kubectl -n biteiq get pods,jobs,pvc,ingress'
+```
+
+Ready pods do not prove browser access. DNS, trusted HTTPS, private account
+provisioning, USDA search, and persisted diary acceptance must also be verified.
+Do not copy a local household database into the cluster without explicit approval.
+
 ## Deploy
 
 The workload set includes a static Expo web frontend, Fastify API, and private
